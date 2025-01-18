@@ -7,7 +7,7 @@ from aac_datasets.utils.collate import BasicCollate
 import json
 import os
 
-clotho_ev_ds = Clotho("data", subset="eval")
+clotho_ev_ds = Clotho("data", subset="eval", download=True)
 collate = BasicCollate()
 loader = DataLoader(clotho_ev_ds, batch_size=32, collate_fn=collate)
 
