@@ -71,7 +71,7 @@ def evaluate_model(model: CoNeTTEModel, data_loader):
             json.dump(references, fp, indent=2)
         
     # Evaluate using the metric
-    corpus_scores, _ = evaluate(candidates=[pred for batch in predictions for pred in batch], mult_references=[ref for batch in references for ref in batch])
+    corpus_scores, _ = evaluate(candidates=predictions, mult_references=references)
     return corpus_scores
 
 # Step 4: Run Evaluation
