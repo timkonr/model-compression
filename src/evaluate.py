@@ -7,12 +7,14 @@ from aac_datasets.utils.collate import BasicCollate
 import json
 import os
 
+print("loading dataset")
 clotho_ev_ds = Clotho("data", subset="eval")
 collate = BasicCollate()
 loader = DataLoader(clotho_ev_ds, batch_size=32, collate_fn=collate)
 
 # Step 1: Load Model
 def load_model(model_path="Labbeti/conette", quantized=False):
+    print("loading model")
     config = CoNeTTEConfig.from_pretrained("Labbeti/conette")
     if quantized:
         model = torch.quantization.quantize_dynamic(
@@ -42,10 +44,11 @@ class AudioDataset(torch.utils.data.Dataset):
 
 # Step 3: Inference Function
 def evaluate_model(model: CoNeTTEModel, data_loader):
+    print("starting evaluation")
     model.eval()
     predictions, references = [], []
     
-    
+    print("loading previous predictions if available")
     if os.path.isfile("predictions") and os.path.getsize("predictions") > 0:
         with open("predictions", "r") as fp:
             predictions = json.load(fp)
@@ -55,6 +58,7 @@ def evaluate_model(model: CoNeTTEModel, data_loader):
             references = json.load(fp)
 
     if not len(predictions) > 0:
+        print("predicting eval dataset")
         with torch.no_grad():
             for batch in data_loader:
                 # Process audio through model
@@ -64,13 +68,14 @@ def evaluate_model(model: CoNeTTEModel, data_loader):
                 # Collect predictions and references
                 predictions.extend(candidates)
                 references.extend(batch["captions"])
-
+        print("saving predictions")
         with open("predictions", "w") as fp:
             json.dump(predictions, fp, indent=2)
         with open("references", "w") as fp:
             json.dump(references, fp, indent=2)
         
     # Evaluate using the metric
+    print("running evaluation")
     corpus_scores, _ = evaluate(candidates=predictions, mult_references=references)
     return corpus_scores
 
