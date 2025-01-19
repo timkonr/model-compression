@@ -14,5 +14,6 @@
 - [ ] set up knowledge distillation pipeline
 - [ ] apply pruning
 - [ ] visualizations
+    - [ ] line charts comparing performance over various compression levels
     - [ ] charts comparing model sizes/inference time/memory usage
     - [ ] scatter plot comparing performance/model efficiency
