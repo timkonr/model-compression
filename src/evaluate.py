@@ -70,8 +70,12 @@ def evaluate_model(model: CoNeTTEModel, data_loader):
     print("predicting eval dataset")
     with torch.no_grad():
         for batch in data_loader:
+            # Move batch tensors to the CPU for quantized model
+            audio = batch["audio"].to("cpu") if "quantized" in model["name"] else batch["audio"]
+            sr = batch["sr"].to("cpu") if "quantized" in model["name"] else batch["sr"]
+            
             # Process audio through model
-            outputs = model(batch["audio"], batch["sr"], task="clotho")
+            outputs = model(audio, sr, task="clotho")
             candidates = outputs["cands"]
 
             # Collect predictions and references
