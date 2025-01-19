@@ -29,7 +29,7 @@ def main():
     
     # Evaluate models
     for model in models_to_eval:
-        model_size_mb = get_model_size(model)
+        model_size_mb = get_model_size(model["model"])
         results = evaluate_model(model["model"], data_loader=loader)
         results = {key: value.item() for key, value in results.items()}
         metadata = {
