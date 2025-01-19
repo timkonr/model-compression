@@ -30,7 +30,7 @@ def main():
     # Evaluate models
     for model in models_to_eval:
         model_size_mb = get_model_size(model["model"])
-        results = evaluate_model(model["model"], data_loader=loader)
+        results = evaluate_model(model["model"], data_loader=loader, quantized=True if "quantized" in model["name"] else False)
         results = {key: value.item() for key, value in results.items()}
         metadata = {
         "model_name": model["name"],
@@ -62,7 +62,7 @@ def load_model(model_path="Labbeti/conette", quantized=False):
         model = CoNeTTEModel.from_pretrained(model_path, config=config)
     return model
 
-def evaluate_model(model: CoNeTTEModel, data_loader):
+def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     print("starting evaluation")
     model.eval()
     predictions, references = [], []
@@ -71,8 +71,8 @@ def evaluate_model(model: CoNeTTEModel, data_loader):
     with torch.no_grad():
         for batch in data_loader:
             # Move batch tensors to the CPU for quantized model
-            audio = batch["audio"].to("cpu") if "quantized" in model["name"] else batch["audio"]
-            sr = batch["sr"].to("cpu") if "quantized" in model["name"] else batch["sr"]
+            audio = batch["audio"].to("cpu") if quantized else batch["audio"]
+            sr = batch["sr"].to("cpu") if quantized else batch["sr"]
             
             # Process audio through model
             outputs = model(audio, sr, task="clotho")
