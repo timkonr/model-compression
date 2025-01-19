@@ -44,6 +44,7 @@ def load_model(model_path="Labbeti/conette", quantized=False):
             {torch.nn.Linear},
             dtype=torch.qint8
         )
+        model.to("cpu")
     else:
         model = CoNeTTEModel.from_pretrained(model_path, config=config)
     return model
