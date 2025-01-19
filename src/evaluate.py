@@ -31,9 +31,9 @@ def main():
     for model in models_to_eval:
         results = evaluate_model(model["model"], data_loader=loader)
         results = {key: value.item() for key, value in results.items()}
-        with open(f"results/eval_results_{model["name"]}", "w") as fp:
+        with open(f"results/eval_results_{model['name']}", "w") as fp:
             json.dump(results, fp, indent=2)
-        print(f"Evaluation Results for {model["name"]} model: {results}")
+        print(f"Evaluation Results for {model['name']} model: {results}")
 
 def load_model(model_path="Labbeti/conette", quantized=False):
     print("loading model")
