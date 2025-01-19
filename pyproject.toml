@@ -1,0 +1,23 @@
+[project]
+name = "model-compression-aac"
+version = "0.1.0"
+description = "A project for exploring model compression techniques in Automated Audio Captioning."
+authors = [
+    { name = "Tim Konrad", email = "ai23m044@technikum-wien.at" }
+]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["audio", "deep-learning", "pytorch", "captioning", "audio-captioning", "model-compression", "quantization", "knowledge-distillation", "pruning"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.scripts]
+mc-evaluate = "evaluate:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "conette.__version__"}
+dependencies = {file = ["requirements.txt"]}
