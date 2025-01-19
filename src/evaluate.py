@@ -29,11 +29,24 @@ def main():
     
     # Evaluate models
     for model in models_to_eval:
+        model_size_mb = get_model_size(model)
         results = evaluate_model(model["model"], data_loader=loader)
         results = {key: value.item() for key, value in results.items()}
+        metadata = {
+        "model_name": model["name"],
+        "model_size_mb": model_size_mb,
+        "evaluation_results": results
+        }
+
         with open(f"results/eval_results_{model['name']}", "w") as fp:
-            json.dump(results, fp, indent=2)
+            json.dump(metadata, fp, indent=2)
         print(f"Evaluation Results for {model['name']} model: {results}")
+
+def get_model_size(model: torch.nn.Module):
+    param_size = sum(p.numel() * p.element_size() for p in model.parameters())
+    buffer_size = sum(b.numel() * b.element_size() for b in model.buffers())
+    total_size = param_size + buffer_size  # in bytes
+    return total_size / (1024 ** 2)  # Convert to MB
 
 def load_model(model_path="Labbeti/conette", quantized=False):
     print("loading model")
