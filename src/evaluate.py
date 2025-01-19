@@ -76,11 +76,14 @@ def evaluate_model(model: CoNeTTEModel, data_loader):
         
     # Evaluate using the metric
     print("running evaluation")
-    corpus_scores, _ = evaluate(candidates=predictions, mult_references=references)
+    corpus_scores, _ = evaluate(candidates=predictions, mult_references=references, metrics="all")
     return corpus_scores
 
 # Step 4: Run Evaluation
 if __name__ == "__main__":
     model = load_model()  # Load pre-trained model
     results = evaluate_model(model, data_loader=loader)
+    results = {key: value.item() for key, value in results.items()}
+    with open("eval_results", "w") as fp:
+        json.dump(results, fp, indent=2)
     print(f"Evaluation Results: {results}")
