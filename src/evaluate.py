@@ -54,8 +54,10 @@ def load_model(model_path="./model/", quantized=False):
     print("loading model")
     config = CoNeTTEConfig.from_pretrained(model_path)
     if quantized:
+        model = CoNeTTEModel.from_pretrained(model_path, config=config)
+        model.to("cpu")
         model = torch.quantization.quantize_dynamic(
-            CoNeTTEModel.from_pretrained(model_path, config=config),
+            model,
             {torch.nn.Linear},
             dtype=torch.qint8
         )
@@ -77,8 +79,8 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     with torch.no_grad():
         for batch in data_loader:
             # Move batch tensors to the CPU for quantized model
-            audio = batch["audio"].to(device) if isinstance(batch["audio"], torch.Tensor) else batch["audio"]
-            sr = batch["sr"].to(device) if isinstance(batch["sr"], torch.Tensor) else batch["sr"]
+            audio = batch["audio"]
+            sr = batch["sr"]
             
             # Process audio through model
             outputs = model(audio, sr, task="clotho")
