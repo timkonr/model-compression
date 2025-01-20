@@ -13,6 +13,7 @@ def main():
     parser.add_argument("--baseline", type=bool, default=True, help="Evaluate baseline model.")
     parser.add_argument("--quantization", type=bool, default=False, help="Evaluate quantized model.")
     args = parser.parse_args()
+    print(f"Starting with params: {args}")
     
     # Loading dataset
     print("loading dataset")
