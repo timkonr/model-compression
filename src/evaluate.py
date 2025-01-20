@@ -6,6 +6,8 @@ from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
 import json
 import argparse
+from time import perf_counter
+
 
 def main():
     # Parse args
@@ -32,13 +34,14 @@ def main():
     # Evaluate models
     for model in models_to_eval:
         model_size_mb = get_model_size(model["model"])
-        results = evaluate_model(model["model"], data_loader=loader, quantized=True if "quantized" in model["name"] else False)
+        results, inference_time = evaluate_model(model["model"], data_loader=loader, quantized=True if "quantized" in model["name"] else False)
         results = {key: value.item() for key, value in results.items()}
         metadata = {
         "model_name": model["name"],
         "model_size_mb": model_size_mb,
         "evaluation_results": results,
-        "device": model["model"].device
+        "device": model["model"].device,
+        "inference_time_in_s": f"{inference_time:.3f}"
         }
 
         with open(f"results/eval_results_{model['name']}", "w") as fp:
@@ -77,6 +80,8 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     model.to(device)
     
     print("predicting eval dataset")
+    
+    start = perf_counter()
     with torch.no_grad():
         for batch in data_loader:
             # Move batch tensors to the CPU for quantized model
@@ -90,11 +95,13 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
             # Collect predictions and references
             predictions.extend(candidates)
             references.extend(batch["captions"])
-        
+    
+    end = perf_counter()
+    inference_time = end - start
     # Evaluate using the metric
     print("running evaluation")
     corpus_scores, _ = evaluate(candidates=predictions, mult_references=references, metrics="all")
-    return corpus_scores
+    return corpus_scores, inference_time
 
 if __name__ == "__main__":
     main()
