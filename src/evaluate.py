@@ -71,8 +71,8 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     with torch.no_grad():
         for batch in data_loader:
             # Move batch tensors to the CPU for quantized model
-            audio = batch["audio"].to("cpu") if quantized else batch["audio"]
-            sr = batch["sr"].to("cpu") if quantized else batch["sr"]
+            audio = batch["audio"] if isinstance(batch["audio"], list) else batch["audio"].tolist()
+            sr = batch["sr"] if isinstance(batch["sr"], list) else batch["sr"].tolist()
             
             # Process audio through model
             outputs = model(audio, sr, task="clotho")
