@@ -10,8 +10,9 @@ import argparse
 def main():
     # Parse args
     parser = argparse.ArgumentParser(description="Evaluate a model.")
-    parser.add_argument("--baseline", type=bool, default=True, help="Evaluate baseline model.")
-    parser.add_argument("--quantization", type=bool, default=False, help="Evaluate quantized model.")
+    parser.add_argument("--baseline", action="store_true", default=True, help="Evaluate baseline model.")
+    parser.add_argument("--no-baseline", dest="baseline", action="store_false", help="Do not evaluate baseline model.")
+    parser.add_argument("--quantization", action="store_true", help="Evaluate quantized model.")
     args = parser.parse_args()
     print(f"Starting with params: {args}")
     
