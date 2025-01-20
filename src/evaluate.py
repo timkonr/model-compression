@@ -69,12 +69,16 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     model.eval()
     predictions, references = [], []
     
+    # Set device
+    device = torch.device("cpu") if quantized else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    
     print("predicting eval dataset")
     with torch.no_grad():
         for batch in data_loader:
             # Move batch tensors to the CPU for quantized model
-            audio = batch["audio"] if isinstance(batch["audio"], list) else batch["audio"].tolist()
-            sr = batch["sr"] if isinstance(batch["sr"], list) else batch["sr"].tolist()
+            audio = batch["audio"].to(device) if isinstance(batch["audio"], torch.Tensor) else batch["audio"]
+            sr = batch["sr"].to(device) if isinstance(batch["sr"], torch.Tensor) else batch["sr"]
             
             # Process audio through model
             outputs = model(audio, sr, task="clotho")
