@@ -37,7 +37,8 @@ def main():
         metadata = {
         "model_name": model["name"],
         "model_size_mb": model_size_mb,
-        "evaluation_results": results
+        "evaluation_results": results,
+        "device": model["model"].device
         }
 
         with open(f"results/eval_results_{model['name']}", "w") as fp:
