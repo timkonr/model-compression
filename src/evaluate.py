@@ -50,9 +50,9 @@ def get_model_size(model: torch.nn.Module):
     total_size = param_size + buffer_size  # in bytes
     return total_size / (1024 ** 2)  # Convert to MB
 
-def load_model(model_path="Labbeti/conette", quantized=False):
+def load_model(model_path="./model/", quantized=False):
     print("loading model")
-    config = CoNeTTEConfig.from_pretrained("Labbeti/conette")
+    config = CoNeTTEConfig.from_pretrained(model_path)
     if quantized:
         model = torch.quantization.quantize_dynamic(
             CoNeTTEModel.from_pretrained(model_path, config=config),
