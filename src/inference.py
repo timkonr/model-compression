@@ -5,7 +5,7 @@ from conette import CoNeTTEConfig, CoNeTTEModel
 
 config = CoNeTTEConfig.from_pretrained("./model/")
 model = CoNeTTEModel.from_pretrained("./model/", config=config)
-
+model.to("cpu")
 quantized_model = quantize_dynamic(
     model, {Linear}, dtype=qint8
 )
