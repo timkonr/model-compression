@@ -80,23 +80,29 @@ Additional info collected is the model size in MB, the device used for inference
 TODO
 
 ## TODOS
-- [x] write README
-- [x] write TODOs
-- [x] add prepare script
+- [ ] project set up
+    - [x] GitHub (repo, readme)
     - [x] download dataset/model
-    - [x] handle missing folders
     - [x] requirements.txt
-- [ ] add config
-- [x] add pyproject.toml
-- [ ] add arg for choosing metrics
-- [ ] allow evaluation for different datasets
-- [x] evaluate quantized models
-- [ ] compare different quantization methods
-- [ ] set up knowledge distillation pipeline
-- [ ] apply pruning
+    - [ ] add config
+    - [x] add pyproject.toml
+    - [ ] add arg/config for choosing metrics
+    - [ ] allow evaluation for different datasets
+    - [x] add timer for inference
+    - [x] log device used in evaluation
+    - [ ] fine-tuning pipeline
+- [ ] quantization
+    - [x] set up quantization
+    - [ ] compare different quantization methods
+    - [ ] compare inference time on cpu for baseline model
+- [ ] knowledge distillation
+    - [ ] set up pipeline
+    - [ ] experiment with model architecture and hyperparameters
+- [ ] pruning
+    - [x] set up pruning
+    - [ ] compare various pruning settings ((globally) unstructured, structured)
+    - [ ] experiment with sparse models
 - [ ] visualizations
     - [ ] line charts comparing performance over various compression levels
     - [ ] charts comparing model sizes/inference time/memory usage
     - [ ] scatter plot comparing performance/model efficiency
-- [x] add timer for evaluation
-- [x] log device used in evaluation
