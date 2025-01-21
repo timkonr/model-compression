@@ -34,6 +34,8 @@ cd model-compression
 pip install -e .
 ```
 
+You also need to install Java >= 1.8 and <= 1.13 on your machine to compute AAC metrics.
+
 Note: It might be necessary to install the proper pytorch version with CUDA manually.
 
 ## Usage
