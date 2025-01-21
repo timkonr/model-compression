@@ -1,0 +1,33 @@
+{
+  "model_name": "baseline",
+  "model_size_mb": 192.62059783935547,
+  "evaluation_results": {
+    "bleu_1": 0.605749301612994,
+    "bleu_2": 0.4028453897002531,
+    "bleu_3": 0.27249516221633013,
+    "bleu_4": 0.1794438566920497,
+    "meteor": 0.19159702947214033,
+    "rouge_l": 0.3976231357181291,
+    "sbert_sim": 0.5174990267791388,
+    "fer": 0.0019138755980861245,
+    "fense": 0.5163805172321471,
+    "cider_d": 0.48177938821017646,
+    "spice": 0.13869152057505835,
+    "spider": 0.3102354543926174,
+    "fer.add_tail_prob": 0.04511087015271187,
+    "fer.repeat_event_prob": 0.07087086141109467,
+    "fer.repeat_adv_prob": 0.0019927991088479757,
+    "fer.remove_conj_prob": 0.1259208768606186,
+    "fer.remove_verb_prob": 0.21848323941230774,
+    "fer.error_prob": 0.341322124004364,
+    "spider_fl": 0.3090527106855647,
+    "vocab.cands": 632.0,
+    "vocab.mrefs_full": 3516.0,
+    "vocab.ratio_full": 0.17974971558589306,
+    "vocab.mrefs_avg": 1837.4,
+    "vocab.ratio_avg": 0.34396429737672796,
+    "bert_score.precision": 0.9765274524688721,
+    "bert_score.recall": 0.9763622879981995,
+    "bert_score.f1": 0.9754940867424011
+  }
+}

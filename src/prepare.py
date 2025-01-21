@@ -11,7 +11,7 @@ def main():
 
     # Download dataset
     os.makedirs("data", exist_ok=True)
-    clotho_ev_ds = Clotho("data", subset="eval", download=True)
+    Clotho("data", subset="eval", download=True)
 
 
 if __name__ == "__main__":

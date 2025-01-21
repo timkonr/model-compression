@@ -1,0 +1,33 @@
+{
+  "model_name": "quantized",
+  "model_size_mb": 48.0261344909668,
+  "evaluation_results": {
+    "bleu_1": 0.6055161261341653,
+    "bleu_2": 0.4028342588573001,
+    "bleu_3": 0.2723095983684829,
+    "bleu_4": 0.17860979721270664,
+    "meteor": 0.19192328237652276,
+    "rouge_l": 0.3988941602926611,
+    "sbert_sim": 0.5186123928491864,
+    "fer": 0.0009569377990430622,
+    "fense": 0.5180006150074268,
+    "cider_d": 0.48317580319380016,
+    "spice": 0.13982697594821925,
+    "spider": 0.3115013895710097,
+    "fer.add_tail_prob": 0.04506248980760574,
+    "fer.repeat_event_prob": 0.06992791593074799,
+    "fer.repeat_adv_prob": 0.0020057004876434803,
+    "fer.remove_conj_prob": 0.12616874277591705,
+    "fer.remove_verb_prob": 0.21803776919841766,
+    "fer.error_prob": 0.3406692445278168,
+    "spider_fl": 0.3104990297650226,
+    "vocab.cands": 633.0,
+    "vocab.mrefs_full": 3516.0,
+    "vocab.ratio_full": 0.18003412969283278,
+    "vocab.mrefs_avg": 1837.4,
+    "vocab.ratio_avg": 0.3445085446827038,
+    "bert_score.precision": 0.9765130877494812,
+    "bert_score.recall": 0.9766250252723694,
+    "bert_score.f1": 0.9756698608398438
+  }
+}
