@@ -1,6 +1,8 @@
 {
   "model_name": "quantized",
   "model_size_mb": 48.0261344909668,
+  "device": "cpu",
+  "inference_time_in_s": "5504.988",
   "evaluation_results": {
     "bleu_1": 0.6055161261341653,
     "bleu_2": 0.4028342588573001,

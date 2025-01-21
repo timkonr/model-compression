@@ -1,6 +1,8 @@
 {
   "model_name": "baseline",
   "model_size_mb": 192.62059783935547,
+  "device": "cuda:0",
+  "inference_time_in_s": "171.565",
   "evaluation_results": {
     "bleu_1": 0.605749301612994,
     "bleu_2": 0.4028453897002531,
