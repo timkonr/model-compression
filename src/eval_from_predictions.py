@@ -1,6 +1,8 @@
 import json
 from aac_metrics import evaluate
 
+# don't use this file unless you know what you are doing
+
 predictions = []
 references = []
 
