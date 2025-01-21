@@ -7,6 +7,7 @@ from aac_datasets.utils.collate import BasicCollate
 import json
 import argparse
 from time import perf_counter
+from utils import get_model_size
 
 
 def main():
@@ -62,13 +63,6 @@ def main():
         with open(f"results/eval_results_{model['name']}", "w") as fp:
             json.dump(metadata, fp, indent=2)
         print(f"Evaluation Results for {model['name']} model: {results}")
-
-
-def get_model_size(model: torch.nn.Module):
-    param_size = sum(p.numel() * p.element_size() for p in model.parameters())
-    buffer_size = sum(b.numel() * b.element_size() for b in model.buffers())
-    total_size = param_size + buffer_size  # in bytes
-    return total_size / (1024**2)  # Convert to MB
 
 
 def load_model(model_path="./model/", quantized=False):
