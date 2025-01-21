@@ -1,19 +1,100 @@
 # model-compression
 
-### TODOS
-- [ ] write README
+<div align="center">
+
+**Low-Complexity Automated Audio Captioning**
+
+<a href="https://www.python.org/">
+    <img alt="Python" src="https://img.shields.io/badge/-Python 3.11-blue?style=for-the-badge&logo=python&logoColor=white">
+</a>
+<a href="https://pytorch.org/get-started/locally/">
+    <img alt="PyTorch" src="https://img.shields.io/badge/-PyTorch 2.2-ee4c2c?style=for-the-badge&logo=pytorch&logoColor=white">
+</a>
+<a href="https://black.readthedocs.io/en/stable/">
+    <img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-black.svg?style=for-the-badge&labelColor=gray">
+</a>
+
+</div>
+
+The aim of this repository is to provide a platform for experimenting with various model compression techniques on an AAC model with competitive performance on the state-of-the-art as part of my master's thesis. In this case, the model I opted for is [CoNeTTE](https://github.com/Labbeti/conette-audio-captioning), which also served in a slightly modified form as the baseline model for the DCASE 2024 challenge in AAC.
+
+## Installation
+First, you need to create an environment that contains **python>=3.11** and **pip**. You can use venv, conda, micromamba or some other python environment tool.
+
+Here is an example with [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html):
+```bash
+conda create -n model_compression python=3.11
+conda activate model_compression
+```
+
+Then, you can clone this repository and install it:
+```bash
+git clone https://github.com/timkonr/model-compression.git
+cd model-compression
+pip install -e .
+```
+
+Note: It might be necessary to install the proper pytorch version with CUDA manually.
+
+## Usage
+
+### Download external data, models and prepare
+
+To download, extract and process data, you need to run:
+```bash
+mc-prepare
+```
+By default, the dataset is stored in the `./data` directory and the pre-trained CoNeTTE model is stored in the `./model` directory.
+
+### Evaluate
+
+For evaluation, the package [aac-metrics](https://aac-metrics.readthedocs.io) is used.
+To run evaluations on a model use the command:
+```bash
+mc-evaluate
+```
+
+Which model to evaluate (and what metrics to use - TODO) can be managed by adding command line args.
+By default, only the baseline model is evaluated and the metrics used are:
+```json
+[
+    "bleu_1",
+    "bleu_2",
+    "bleu_3",
+    "bleu_4",
+    "meteor",
+    "rouge_l",
+    "fense",
+    "spider_fl",
+    "vocab",
+    "bert_score"
+]
+```
+
+Additional info collected is the model size in MB, the device used for inference and the inference time.
+
+### Visualizations
+
+TODO
+
+## TODOS
+- [x] write README
 - [x] write TODOs
-- [ ] extend evaluation script so that it runs from scratch
-    - [ ] download dataset iff not available
-    - [ ] handle missing data folder
-    - [ ] requirements.txt
+- [x] add prepare script
+    - [x] download dataset/model
+    - [x] handle missing folders
+    - [x] requirements.txt
 - [ ] add config
-- [ ] add pyproject.toml
+- [x] add pyproject.toml
+- [ ] add arg for choosing metrics
 - [ ] allow evaluation for different datasets
-- [ ] evaluate quantized models
+- [x] evaluate quantized models
+- [ ] compare different quantization methods
 - [ ] set up knowledge distillation pipeline
 - [ ] apply pruning
 - [ ] visualizations
     - [ ] line charts comparing performance over various compression levels
     - [ ] charts comparing model sizes/inference time/memory usage
     - [ ] scatter plot comparing performance/model efficiency
+- [x] add timer for evaluation
+- [x] log device used in evaluation
