@@ -5,10 +5,9 @@ from conette import CoNeTTEConfig, CoNeTTEModel
 
 config = CoNeTTEConfig.from_pretrained("./model/")
 model = CoNeTTEModel.from_pretrained("./model/", config=config)
+
 model.to("cpu")
-quantized_model = quantize_dynamic(
-    model, {Linear}, dtype=qint8
-)
+quantized_model = quantize_dynamic(model, {Linear}, dtype=qint8)
 quantized_model.to("cpu")
 path = "data/CLOTHO_v2.1/clotho_audio_files/evaluation/"
 
