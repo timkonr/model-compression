@@ -1,0 +1,4 @@
+aac-datasets~=0.5.0
+aac-metrics~=0.5.3
+conette~=0.1.4
+torch==2.2.1
