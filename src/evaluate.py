@@ -1,5 +1,5 @@
 import torch
-from conette import CoNeTTEConfig, CoNeTTEModel
+from conette import CoNeTTEModel
 from torch.utils.data import DataLoader
 from aac_metrics import evaluate
 from aac_datasets import Clotho
@@ -7,7 +7,7 @@ from aac_datasets.utils.collate import BasicCollate
 import json
 import argparse
 from time import perf_counter
-from utils import get_model_size
+from utils import get_model_size, load_model
 
 
 def main():
@@ -25,6 +25,7 @@ def main():
     parser.add_argument(
         "--quantization", action="store_true", help="Evaluate quantized model."
     )
+    parser.add_argument("--pruning", action="store_true", help="Evaluate pruned model.")
     args = parser.parse_args()
     print(f"Starting with params: {args}")
 
@@ -42,6 +43,8 @@ def main():
         models_to_eval.append(
             {"model": load_model(quantized=True), "name": "quantized"}
         )
+    if args.pruning:
+        models_to_eval.append({"model": load_model(pruned=True), "name": "pruned"})
 
     # Evaluate models
     for model in models_to_eval:
@@ -63,21 +66,6 @@ def main():
         with open(f"results/eval_results_{model['name']}", "w") as fp:
             json.dump(metadata, fp, indent=2)
         print(f"Evaluation Results for {model['name']} model: {results}")
-
-
-def load_model(model_path="./model/", quantized=False):
-    print("loading model")
-    config = CoNeTTEConfig.from_pretrained(model_path)
-    if quantized:
-        model = CoNeTTEModel.from_pretrained(model_path, config=config)
-        model.to("cpu")
-        model = torch.quantization.quantize_dynamic(
-            model, {torch.nn.Linear}, dtype=torch.qint8
-        )
-        model.to("cpu")
-    else:
-        model = CoNeTTEModel.from_pretrained(model_path, config=config)
-    return model
 
 
 def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
