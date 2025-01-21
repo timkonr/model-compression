@@ -54,9 +54,9 @@ def main():
         metadata = {
             "model_name": model["name"],
             "model_size_mb": model_size_mb,
-            "evaluation_results": results,
             "device": model["model"].device,
             "inference_time_in_s": f"{inference_time:.3f}",
+            "evaluation_results": results,
         }
 
         with open(f"results/eval_results_{model['name']}", "w") as fp:
