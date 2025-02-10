@@ -90,7 +90,6 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
         for batch in data_loader:
             audio = batch["audio"]
             sr = batch["sr"]
-            audio = audio.to(model.dtype)
 
             # Process audio through model
             outputs = model(audio, sr, task="clotho")
