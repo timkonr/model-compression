@@ -74,12 +74,12 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     predictions, references = [], []
 
     # Set device
-    device = (
-        torch.device("cpu")
-        if quantized
-        else torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    )
-    model.to(device)
+    # device = (
+    #     torch.device("cpu")
+    #     if quantized
+    #     else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # )
+    # model.to(device)
 
     print("predicting eval dataset")
 
