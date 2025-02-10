@@ -28,6 +28,10 @@ def get_model_size(model: torch.nn.Module):
     return total_size / (1024**2)  # Convert to MB
 
 
+def get_model_params(model: torch.nn.Module):
+    return sum(p.numel() for p in model.parameters())
+
+
 def check_sparsity(model: torch.nn.Module):
     total_params = 0
     zero_params = 0

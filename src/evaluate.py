@@ -7,7 +7,7 @@ from aac_datasets.utils.collate import BasicCollate
 import json
 import argparse
 from time import perf_counter
-from utils import get_model_size, load_model
+from utils import get_model_size, load_model, get_model_params
 
 
 def main():
@@ -49,6 +49,7 @@ def main():
     # Evaluate models
     for model in models_to_eval:
         model_size_mb = get_model_size(model["model"])
+        model_params = get_model_params(model["model"])
         results, inference_time = evaluate_model(
             model["model"],
             data_loader=loader,
@@ -58,6 +59,7 @@ def main():
         metadata = {
             "model_name": model["name"],
             "model_size_mb": model_size_mb,
+            "parameters": model_params,
             "device": str(next(model["model"].parameters()).device),
             "inference_time_in_s": f"{inference_time:.3f}",
             "evaluation_results": results,
