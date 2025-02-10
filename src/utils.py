@@ -8,11 +8,12 @@ def load_model(model_path="./model/", quantized=False, pruned=False):
     config = CoNeTTEConfig.from_pretrained(model_path)
     if quantized:
         model = CoNeTTEModel.from_pretrained(model_path, config=config)
-        model.to("cpu")
-        model = torch.quantization.quantize_dynamic(
-            model, {torch.nn.Linear}, dtype=torch.qint8
-        )
-        model.to("cpu")
+        # model.to("cpu")
+        # model = torch.quantization.quantize_dynamic(
+        #     model, {torch.nn.Linear}, dtype=torch.qint8
+        # )
+        model.half()
+        # model.to("cpu")
     else:
         model = CoNeTTEModel.from_pretrained(model_path, config=config)
         if pruned:
