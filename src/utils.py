@@ -12,7 +12,6 @@ def load_model(model_path="./model/", quantized=False, pruned=False):
         # model = torch.quantization.quantize_dynamic(
         #     model, {torch.nn.Linear}, dtype=torch.qint8
         # )
-        model.half()
         # model.to("cpu")
     else:
         model = CoNeTTEModel.from_pretrained(model_path, config=config)
