@@ -98,13 +98,16 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
             inputs=[torch_tensorrt.Input((1, 3, 32, 32))],
             enabled_precisions={torch.float, torch.half, torch.int8},
             calibrator=calibrator,
-            device={
-                "device_type": torch_tensorrt.DeviceType.GPU,
-                "gpu_id": 0,
-                "dla_core": 0,
-                "allow_gpu_fallback": False,
-                "disable_tf32": False,
-            },
+            # device={
+            #     "device_type": torch_tensorrt.DeviceType.GPU,
+            #     "gpu_id": 0,
+            #     "dla_core": 0,
+            #     "allow_gpu_fallback": False,
+            #     "disable_tf32": False,
+            # },
+            device=torch_tensorrt.Device(
+                torch_tensorrt.DeviceType.GPU, allow_gpu_fallback=True, dla_core=0
+            ),
         )
 
     print("predicting eval dataset")
