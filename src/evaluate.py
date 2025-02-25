@@ -2,12 +2,13 @@ import torch
 from conette import CoNeTTEModel
 from torch.utils.data import DataLoader
 from aac_metrics import evaluate
-from aac_datasets import Clotho
+from aac_datasets import Clotho, AudioCaps
 from aac_datasets.utils.collate import BasicCollate
 import json
 import argparse
 from time import perf_counter
 from utils import get_model_size, load_model, get_model_params
+import config
 
 
 def main():
@@ -40,9 +41,14 @@ def main():
 
     # Loading dataset
     print("loading dataset")
-    clotho_ev_ds = Clotho("data", subset="eval")
+    print(config.dataset, config.dataset == "clotho")
+    ds = (
+        Clotho("data", subset="eval")
+        if config.dataset == "clotho"
+        else AudioCaps("data", subset="val", download=True)
+    )
     collate = BasicCollate()
-    loader = DataLoader(clotho_ev_ds, batch_size=32, collate_fn=collate)
+    loader = DataLoader(ds, batch_size=32, collate_fn=collate)
 
     # Load models
     models_to_eval = []
