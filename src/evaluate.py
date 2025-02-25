@@ -26,6 +26,15 @@ def main():
         "--quantization", action="store_true", help="Evaluate quantized model."
     )
     parser.add_argument("--pruning", action="store_true", help="Evaluate pruned model.")
+    parser.add_argument(
+        "--cpu", action="store_true", default=True, help="Evaluate on CPU"
+    )
+    parser.add_argument(
+        "--gpu",
+        dest="cpu",
+        action="store_false",
+        help="Evaluate on GPU (not available for quantization)",
+    )
     args = parser.parse_args()
     print(f"Starting with params: {args}")
 
@@ -50,6 +59,8 @@ def main():
     for model in models_to_eval:
         model_size_mb = get_model_size(model["model"])
         model_params = get_model_params(model["model"])
+        if args.cpu:
+            model["model"].to("cpu")
         results, inference_time = evaluate_model(
             model["model"],
             data_loader=loader,
