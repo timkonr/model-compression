@@ -8,7 +8,6 @@ import json
 import argparse
 from time import perf_counter
 from utils import get_model_size, load_model, get_model_params
-import torch_tensorrt
 
 
 def main():
@@ -76,42 +75,7 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     model.eval()
     predictions, references = [], []
 
-    # Set device
-    # device = (
-    #     torch.device("cpu")
-    #     if quantized
-    #     else torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # )
-    # model.to(device)
-
-    if quantized:
-        calibrator = torch_tensorrt.ptq.DataLoaderCalibrator(
-            data_loader,
-            cache_file="./calibration.cache",
-            use_cache=False,
-            algo_type=torch_tensorrt.ptq.CalibrationAlgo.ENTROPY_CALIBRATION_2,
-            device=torch.device("cuda:0"),
-        )
-
-        model = torch_tensorrt.compile(
-            model,
-            inputs=[torch_tensorrt.Input((1, 3, 32, 32))],
-            enabled_precisions={torch.float, torch.half, torch.int8},
-            calibrator=calibrator,
-            # device={
-            #     "device_type": torch_tensorrt.DeviceType.GPU,
-            #     "gpu_id": 0,
-            #     "dla_core": 0,
-            #     "allow_gpu_fallback": False,
-            #     "disable_tf32": False,
-            # },
-            device=torch_tensorrt.Device(
-                torch_tensorrt.DeviceType.GPU, allow_gpu_fallback=True, dla_core=0
-            ),
-        )
-
     print("predicting eval dataset")
-
     start = perf_counter()
     with torch.no_grad():
         for batch in data_loader:

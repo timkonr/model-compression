@@ -6,17 +6,15 @@ from prune import apply_global_unstructured_pruning
 def load_model(model_path="./model/", quantized=False, pruned=False):
     print("loading model")
     config = CoNeTTEConfig.from_pretrained(model_path)
+    model = CoNeTTEModel.from_pretrained(model_path, config=config)
     if quantized:
-        model = CoNeTTEModel.from_pretrained(model_path, config=config)
-        # model.to("cpu")
-        # model = torch.quantization.quantize_dynamic(
-        #     model, {torch.nn.Linear}, dtype=torch.qint8
-        # )
-        # model.to("cpu")
-    else:
-        model = CoNeTTEModel.from_pretrained(model_path, config=config)
-        if pruned:
-            apply_global_unstructured_pruning(model)
+        model.to("cpu")
+        model = torch.quantization.quantize_dynamic(
+            model, {torch.nn.Linear}, dtype=torch.qint8
+        )
+        model.to("cpu")
+    if pruned:
+        apply_global_unstructured_pruning(model)
     return model
 
 
