@@ -77,6 +77,7 @@ def main():
             "model_name": model["name"],
             "model_size_mb": model_size_mb,
             "parameters": model_params,
+            "dataset": config.dataset,
             "device": str(next(model["model"].parameters()).device),
             "inference_time_in_s": f"{inference_time:.3f}",
             "evaluation_results": results,
