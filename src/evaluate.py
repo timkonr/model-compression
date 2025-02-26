@@ -9,6 +9,7 @@ import argparse
 from time import perf_counter
 from utils import get_model_size, load_model, get_model_params
 import config
+import datetime
 
 
 def main():
@@ -47,6 +48,10 @@ def main():
         if config.dataset == "clotho"
         else AudioCaps("data", subset="val", download=True)
     )
+    print(len(ds))
+    for i in range(5):
+        print(ds[i])
+
     collate = BasicCollate()
     loader = DataLoader(ds, batch_size=32, collate_fn=collate)
 
@@ -73,17 +78,21 @@ def main():
             quantized=True if "quantized" in model["name"] else False,
         )
         results = {key: value.item() for key, value in results.items()}
+        device = str(next(model["model"].parameters()).device)
         metadata = {
             "model_name": model["name"],
             "model_size_mb": model_size_mb,
             "parameters": model_params,
             "dataset": config.dataset,
-            "device": str(next(model["model"].parameters()).device),
+            "device": device,
             "inference_time_in_s": f"{inference_time:.3f}",
             "evaluation_results": results,
         }
 
-        with open(f"results/eval_results_{model['name']}", "w") as fp:
+        with open(
+            f"results/eval_results_{device}_{model['name']}_{datetime.datetime.now().strftime("%Y%m%d_%H%M")}",
+            "w",
+        ) as fp:
             json.dump(metadata, fp, indent=2)
         print(f"Evaluation Results for {model['name']} model: {results}")
 
