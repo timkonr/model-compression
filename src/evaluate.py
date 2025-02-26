@@ -51,7 +51,7 @@ def main():
 
     for i in range(len(ds)):
         try:
-            print(i)
+            print(i, ds[i]["fname"])
         except Exception as e:
             print(f"Exception on index {i}: {str(e)}")
 
