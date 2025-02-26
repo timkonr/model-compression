@@ -53,7 +53,7 @@ def main():
         try:
             print(i)
         except Exception as e:
-            print(str(e))
+            print(f"Exception on index {i}: {str(e)}")
 
     collate = BasicCollate()
     loader = DataLoader(ds, batch_size=1, collate_fn=collate)
