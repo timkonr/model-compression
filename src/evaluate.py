@@ -49,6 +49,8 @@ def main():
         else AudioCaps("data", subset="val", download=True, verify_files=True)
     )
 
+    print([ds[i]["fname"] for i in range(len(ds))])
+
     collate = BasicCollate()
     loader = DataLoader(ds, batch_size=1, collate_fn=collate)
 
@@ -104,7 +106,6 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     with torch.no_grad():
         for i, batch in enumerate(data_loader):
             print(f"Batch {i}: {batch['fname']}")
-
             audio = batch["audio"]
             sr = batch["sr"]
 
