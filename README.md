@@ -36,6 +36,8 @@ pip install -e .
 
 You also need to install Java >= 1.8 and <= 1.13 on your machine to compute AAC metrics.
 
+If you intend to use the AudioCaps dataset, **ffmpeg** and **yt-dlp** need to be installed as well. See [aac-datasets](https://aac-datasets.readthedocs.io/en/stable/installation.html#external-requirements-audiocaps-only) for more information.
+
 Note: It might be necessary to install the proper pytorch version with CUDA manually.
 
 ## Usage
@@ -84,17 +86,19 @@ TODO
     - [x] GitHub (repo, readme)
     - [x] download dataset/model
     - [x] requirements.txt
-    - [ ] add config
+    - [x] add config
     - [x] add pyproject.toml
     - [ ] add arg/config for choosing metrics
     - [ ] allow evaluation for different datasets
     - [x] add timer for inference
     - [x] log device used in evaluation
     - [ ] fine-tuning pipeline
+    - [ ] separate inference from evaluation
+        - [ ] allow for using previous inference results in evaluation
 - [ ] quantization
     - [x] set up quantization
     - [ ] compare different quantization methods
-    - [ ] compare inference time on cpu for baseline model
+    - [x] compare inference time on cpu for baseline model
 - [ ] knowledge distillation
     - [ ] set up pipeline
     - [ ] experiment with model architecture and hyperparameters
