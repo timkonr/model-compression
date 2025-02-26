@@ -103,6 +103,8 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     start = perf_counter()
     with torch.no_grad():
         for i, batch in enumerate(data_loader):
+            print(f"Batch {i}: {batch['fname']}")
+
             audio = batch["audio"]
             sr = batch["sr"]
 
