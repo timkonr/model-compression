@@ -126,7 +126,7 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     # Evaluate using the metric
     print("running evaluation")
     corpus_scores, _ = evaluate(
-        candidates=predictions, mult_references=references, metrics="all"
+        candidates=predictions, mult_references=references, metrics=config.metrics
     )
     return corpus_scores, inference_time
 
