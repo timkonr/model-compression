@@ -46,7 +46,7 @@ def main():
     ds = (
         Clotho("data", subset="eval")
         if config.dataset == "clotho"
-        else AudioCaps("data", subset="val", download=True)
+        else AudioCaps("data", subset="val", download=True, verify_files=True)
     )
     print(len(ds))
     for i in range(3):
