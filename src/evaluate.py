@@ -90,7 +90,7 @@ def main():
         }
 
         with open(
-            f"results/eval_results_{device}_{model['name']}_{datetime.datetime.now().strftime("%Y%m%d_%H%M")}",
+            f"results/eval_results_{device}_{model['name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
             "w",
         ) as fp:
             json.dump(metadata, fp, indent=2)
