@@ -51,7 +51,7 @@ def main():
 
     for i in range(len(ds)):
         try:
-            print(ds[i])
+            print(i)
         except Exception as e:
             print(str(e))
 
