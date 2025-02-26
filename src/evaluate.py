@@ -58,7 +58,7 @@ def main():
         sr = [item["sr"] for item in batch]
         return {"audio": audios, "captions": captions, "sr": sr}
 
-    loader = DataLoader(ds, batch_size=32, collate_fn=custom_collate_fn)
+    loader = DataLoader(ds, batch_size=1, collate_fn=custom_collate_fn)
 
     # Load models
     models_to_eval = []
@@ -110,7 +110,8 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     print("predicting eval dataset")
     start = perf_counter()
     with torch.no_grad():
-        for batch in data_loader:
+        for i, batch in enumerate(data_loader):
+            print(f"Batch {i}: {batch.keys()}")
             audio = batch["audio"]
             sr = batch["sr"]
 
