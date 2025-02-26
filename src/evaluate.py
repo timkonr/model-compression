@@ -58,7 +58,8 @@ def main():
         sr = [item["sr"] for item in batch]
         return {"audio": audios, "captions": captions, "sr": sr}
 
-    loader = DataLoader(ds, batch_size=1, collate_fn=custom_collate_fn)
+    collate = BasicCollate()
+    loader = DataLoader(ds, batch_size=1, collate_fn=collate)
 
     # Load models
     models_to_eval = []
@@ -111,7 +112,9 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     start = perf_counter()
     with torch.no_grad():
         for i, batch in enumerate(data_loader):
-            print(f"Batch {i}: {batch.keys()}")
+            print(f"Batch {i}: {batch["fname"]}")
+            if i > 69:
+                print(batch)
             audio = batch["audio"]
             sr = batch["sr"]
 
