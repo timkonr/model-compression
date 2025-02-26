@@ -88,11 +88,10 @@ TODO
     - [x] requirements.txt
     - [x] add config
     - [x] add pyproject.toml
-    - [ ] add arg/config for choosing metrics
-    - [ ] allow evaluation for different datasets
+    - [x] add config for choosing metrics
+    - [x] allow evaluation for different datasets
     - [x] add timer for inference
     - [x] log device used in evaluation
-    - [ ] fine-tuning pipeline
     - [ ] separate inference from evaluation
         - [ ] allow for using previous inference results in evaluation
 - [ ] quantization
@@ -102,10 +101,12 @@ TODO
 - [ ] knowledge distillation
     - [ ] set up pipeline
     - [ ] experiment with model architecture and hyperparameters
+    - [ ] fine-tuning pipeline
 - [ ] pruning
     - [x] set up pruning
     - [ ] compare various pruning settings ((globally) unstructured, structured)
     - [ ] experiment with sparse models
+    - [ ] fine-tuning pipeline
 - [ ] visualizations
     - [ ] line charts comparing performance over various compression levels
     - [ ] charts comparing model sizes/inference time/memory usage
