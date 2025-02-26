@@ -49,7 +49,11 @@ def main():
         else AudioCaps("data", subset="val", download=True, verify_files=True)
     )
 
-    print([ds[i]["fname"] for i in range(len(ds))])
+    for i in range(len(ds)):
+        try:
+            print(ds[i])
+        except Exception as e:
+            print(str(e))
 
     collate = BasicCollate()
     loader = DataLoader(ds, batch_size=1, collate_fn=collate)
