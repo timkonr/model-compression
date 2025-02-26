@@ -8,6 +8,10 @@ def load_model(model_path="./model/", quantized=False, pruned=False):
     config = CoNeTTEConfig.from_pretrained(model_path)
     model = CoNeTTEModel.from_pretrained(model_path, config=config)
     if quantized:
+        # GPU quantization doesn't work atm, because it is still in alpha or beta for pytorch
+        # i.e. it actually would work, but only for a fixed input shape,
+        # which would require us to define a specific length for the input audio files and adapt the preprocesser in the process
+        # so I think this is beyond the scope of this thesis
         model.to("cpu")
         model = torch.quantization.quantize_dynamic(
             model, {torch.nn.Linear}, dtype=torch.qint8
