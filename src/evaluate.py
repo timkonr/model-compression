@@ -48,15 +48,6 @@ def main():
         if config.dataset == "clotho"
         else AudioCaps("data", subset="val", download=True, verify_files=True)
     )
-    print(len(ds))
-    for i in range(3):
-        print(ds[69 + i])
-
-    def custom_collate_fn(batch):
-        audios = [item["audio"] for item in batch]
-        captions = [item["captions"] for item in batch]
-        sr = [item["sr"] for item in batch]
-        return {"audio": audios, "captions": captions, "sr": sr}
 
     collate = BasicCollate()
     loader = DataLoader(ds, batch_size=1, collate_fn=collate)
@@ -112,9 +103,6 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
     start = perf_counter()
     with torch.no_grad():
         for i, batch in enumerate(data_loader):
-            print(f"Batch {i}: {batch['fname']}")
-            if i > 69:
-                print(batch)
             audio = batch["audio"]
             sr = batch["sr"]
 
