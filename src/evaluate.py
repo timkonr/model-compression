@@ -52,8 +52,13 @@ def main():
     for i in range(5):
         print(ds[i])
 
-    collate = BasicCollate()
-    loader = DataLoader(ds, batch_size=32, collate_fn=collate)
+    def custom_collate_fn(batch):
+        audios = [item["audio"] for item in batch]
+        captions = [item["captions"] for item in batch]
+        sr = [item["sr"] for item in batch]
+        return {"audio": audios, "captions": captions, "sr": sr}
+
+    loader = DataLoader(ds, batch_size=32, collate_fn=custom_collate_fn)
 
     # Load models
     models_to_eval = []
