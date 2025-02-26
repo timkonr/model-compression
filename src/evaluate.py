@@ -49,8 +49,8 @@ def main():
         else AudioCaps("data", subset="val", download=True)
     )
     print(len(ds))
-    for i in range(5):
-        print(ds[i])
+    for i in range(3):
+        print(ds[69 + i])
 
     def custom_collate_fn(batch):
         audios = [item["audio"] for item in batch]
