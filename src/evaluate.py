@@ -10,24 +10,12 @@ from time import perf_counter
 from utils import get_model_size, load_model, get_model_params
 import config
 import datetime
+import os
 
 
 def main():
     # Parse args
     parser = argparse.ArgumentParser(description="Evaluate a model.")
-    parser.add_argument(
-        "--baseline", action="store_true", default=True, help="Evaluate baseline model."
-    )
-    parser.add_argument(
-        "--no-baseline",
-        dest="baseline",
-        action="store_false",
-        help="Do not evaluate baseline model.",
-    )
-    parser.add_argument(
-        "--quantization", action="store_true", help="Evaluate quantized model."
-    )
-    parser.add_argument("--pruning", action="store_true", help="Evaluate pruned model.")
     parser.add_argument(
         "--cpu", action="store_true", default=True, help="Evaluate on CPU"
     )
@@ -37,71 +25,83 @@ def main():
         action="store_false",
         help="Evaluate on GPU (not available for quantization)",
     )
+    parser.add_argument(
+        "--path",
+        help="Path to folder containing predictions and references. Only used when config.inference is False.",
+    )
+    parser.add_argument("-v", "--verbose", help="Print some debug output")
     args = parser.parse_args()
     print(f"Starting with params: {args}")
+    print(f"Starting with config: {config}")
 
-    # Loading dataset
-    print("loading dataset")
-    print(config.dataset, config.dataset == "clotho")
-    ds = (
-        Clotho("data", subset="eval")
-        if config.dataset == "clotho"
-        else AudioCaps("data", subset="val", download=True, verify_files=True)
-    )
+    if config.inference:
+        # Loading dataset
+        print("loading dataset")
+        print(config.dataset, config.dataset == "clotho")
 
-    for i in range(len(ds)):
-        try:
-            print(i, ds[i]["fname"])
-        except Exception as e:
-            print(f"Exception on index {i}: {str(e)}")
+        if config.dataset == "clotho":
+            ds = Clotho("data", subset="eval")
+        elif config.dataset == "audiocaps":
+            ds = AudioCaps("data", subset="val")
+        else:
+            raise ValueError(f"Unsupported dataset: {config.dataset}")
 
-    collate = BasicCollate()
-    loader = DataLoader(ds, batch_size=1, collate_fn=collate)
+        if args.verbose:
+            for i in range(len(ds)):
+                try:
+                    print(i, ds[i]["fname"])
+                except Exception as e:
+                    print(f"Exception on index {i}: {str(e)}")
 
-    # Load models
-    models_to_eval = []
-    if args.baseline:
-        models_to_eval.append({"model": load_model(), "name": "baseline"})
-    if args.quantization:
-        models_to_eval.append(
-            {"model": load_model(quantized=True), "name": "quantized"}
-        )
-    if args.pruning:
-        models_to_eval.append({"model": load_model(pruned=True), "name": "pruned"})
+        collate = BasicCollate()
+        loader = DataLoader(ds, batch_size=1, collate_fn=collate)
 
-    # Evaluate models
-    for model in models_to_eval:
-        model_size_mb = get_model_size(model["model"])
-        model_params = get_model_params(model["model"])
-        if args.cpu:
-            model["model"].to("cpu")
-        results, inference_time = evaluate_model(
-            model["model"],
-            data_loader=loader,
-            quantized=True if "quantized" in model["name"] else False,
-        )
-        results = {key: value.item() for key, value in results.items()}
-        device = str(next(model["model"].parameters()).device)
-        metadata = {
-            "model_name": model["name"],
-            "model_size_mb": model_size_mb,
-            "parameters": model_params,
-            "dataset": config.dataset,
-            "device": device,
-            "inference_time_in_s": f"{inference_time:.3f}",
-            "evaluation_results": results,
-        }
+        # Load models
+        models_to_eval = []
+        if config.baseline:
+            models_to_eval.append({"model": load_model(), "name": "baseline"})
+        if config.quantization:
+            models_to_eval.append(
+                {"model": load_model(quantized=True), "name": "quantized"}
+            )
+        if config.pruning:
+            models_to_eval.append({"model": load_model(pruned=True), "name": "pruned"})
 
-        with open(
-            f"results/eval_results_{device}_{model['name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
-            "w",
-        ) as fp:
-            json.dump(metadata, fp, indent=2)
-        print(f"Evaluation Results for {model['name']} model: {results}")
+        # Evaluate models
+        for model in models_to_eval:
+            if args.cpu:
+                model["model"].to("cpu")
+            model_size_mb = get_model_size(model["model"])
+            model_params = get_model_params(model["model"])
+            results, inference_time = evaluate_model(model["model"], data_loader=loader)
+            results = {key: value.item() for key, value in results.items()}
+            device = str(next(model["model"].parameters()).device)
+            metadata = {
+                "model_name": model["name"],
+                "model_size_mb": model_size_mb,
+                "parameters": model_params,
+                "dataset": config.dataset,
+                "device": device,
+                "inference_time_in_s": f"{inference_time:.3f}",
+                "evaluation_results": results,
+            }
+
+            with open(
+                f"results/eval_results_{device}_{model['name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
+                "w",
+            ) as fp:
+                json.dump(metadata, fp, indent=2)
+            print(f"Evaluation Results for {model['name']} model: {results}")
+    elif config.evaluation:
+        # do evaluation without inference
+        print(f"Evaluating results from: {args.path}")
+        evaluate_model(path=args.path)
+    else:
+        raise ValueError("Doing neither inference nor evaluation")
 
 
-def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
-    print("starting evaluation")
+def inference(model: CoNeTTEModel, data_loader):
+    print("starting inference")
     model.eval()
     predictions, references = [], []
 
@@ -123,12 +123,48 @@ def evaluate_model(model: CoNeTTEModel, data_loader, quantized=False):
 
     end = perf_counter()
     inference_time = end - start
-    # Evaluate using the metric
-    print("running evaluation")
-    corpus_scores, _ = evaluate(
-        candidates=predictions, mult_references=references, metrics=config.metrics
+    return predictions, references, inference_time
+
+
+def parse_previous_results(path: str):
+    if not os.path.isfile(path):
+        raise ValueError(f"{path} is not a file.")
+    with open(f"path", "r") as fp:
+        contents = json.load(fp)
+        predictions = contents.predictions
+        references = contents.references
+        inference_time = contents.inference_time
+
+    return predictions, references, inference_time
+
+
+def evaluate_model(model: CoNeTTEModel, data_loader, path):
+    predictions, references, inference_time = (
+        inference(model, data_loader)
+        if config.inference
+        else parse_previous_results(path)
     )
-    return corpus_scores, inference_time
+
+    if config.evaluation:
+        # Evaluate using the metric
+        print("running evaluation")
+        corpus_scores, _ = evaluate(
+            candidates=predictions, mult_references=references, metrics=config.metrics
+        )
+        return corpus_scores, inference_time
+    else:
+        # Save inference results
+        metadata = {
+            "model_name": model["name"],
+            "inference_time_in_s": f"{inference_time:.3f}",
+            "predictions": predictions,
+            "references": references,
+        }
+        with open(
+            f"results/inference_results_{model['name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
+            "w",
+        ) as fp:
+            json.dump(metadata, fp, indent=2)
 
 
 if __name__ == "__main__":

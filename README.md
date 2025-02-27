@@ -82,7 +82,7 @@ Additional info collected is the model size in MB, the device used for inference
 TODO
 
 ## TODOS
-- [ ] project set up
+- [x] project set up
     - [x] GitHub (repo, readme)
     - [x] download dataset/model
     - [x] requirements.txt
@@ -92,8 +92,8 @@ TODO
     - [x] allow evaluation for different datasets
     - [x] add timer for inference
     - [x] log device used in evaluation
-    - [ ] separate inference from evaluation
-        - [ ] allow for using previous inference results in evaluation
+    - [x] separate inference from evaluation
+        - [x] allow for using previous inference results in evaluation
 - [ ] quantization
     - [x] set up quantization
     - [ ] compare different quantization methods
@@ -105,6 +105,7 @@ TODO
 - [ ] pruning
     - [x] set up pruning
     - [ ] compare various pruning settings ((globally) unstructured, structured)
+    - [ ] log pruning params
     - [ ] experiment with sparse models
     - [ ] fine-tuning pipeline
 - [ ] visualizations
