@@ -29,7 +29,9 @@ def parse_args():
         "--path",
         help="Path to folder containing predictions and references. Only used when config.inference is False.",
     )
-    parser.add_argument("-v", "--verbose", help="Print some debug output")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Print some debug output"
+    )
     args = parser.parse_args()
     print(f"Starting with params: {args}")
     print(
@@ -136,13 +138,14 @@ def perform_inference(verbose, cpu):
 def load_previous_results(path):
     if not os.path.isfile(path):
         raise ValueError(f"{path} is not a file.")
-    with open(f"path", "r") as fp:
+    with open(path, "r") as fp:
         contents = json.load(fp)
 
     return [contents]
 
 
 def save_results(results, fpath):
+    os.makedirs("results", exist_ok=True)
     with open(
         fpath,
         "w",
@@ -154,14 +157,14 @@ def save_inference_results(inference_results):
     for r in inference_results:
         save_results(
             r,
-            f"results/inference_results_{r.model_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
+            f"results/inference_results_{r['model_name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
         )
 
 
 def perform_evaluation(inference_results):
     eval_results = []
     for r in inference_results:
-        print(f"running evaluation on model {r.model_name}")
+        print(f"running evaluation on model {r['model_name']}")
         predictions = r.pop("predictions")
         references = r.pop("references")
         corpus_scores, _ = evaluate(
@@ -181,7 +184,7 @@ def save_eval_results(eval_results):
     for r in eval_results:
         save_results(
             r,
-            f"results/eval_results_{r.device}_{r.model_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
+            f"results/eval_results_{r['device']}_{r['model_name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
         )
 
 
@@ -191,7 +194,7 @@ def main():
 
     args = parse_args()
 
-    if config.inferece:
+    if config.inference:
         inference_results = perform_inference(args.verbose, args.cpu)
     elif args.path:
         inference_results = load_previous_results(args.path)
