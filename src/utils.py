@@ -1,6 +1,6 @@
 import torch
 from conette import CoNeTTEConfig, CoNeTTEModel
-from prune import apply_global_unstructured_pruning
+from prune import prune, use_torch_pruning
 
 
 def load_model(model_path="./model/", quantized=False, pruned=False):
@@ -18,7 +18,14 @@ def load_model(model_path="./model/", quantized=False, pruned=False):
         )
         model.to("cpu")
     if pruned:
-        apply_global_unstructured_pruning(model)
+        print(f"Initial model size: {get_model_size(model)}")
+        print(f"Initial model params: {get_model_params(model)}")
+        # model = prune(model, fine_tune=False)
+
+        use_torch_pruning(model)
+        print(f"Pruned model size: {get_model_size(model)}")
+        print(f"Pruned model params: {get_model_params(model)}")
+        # apply_global_unstructured_pruning(model)
     return model
 
 
