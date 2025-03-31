@@ -2,5 +2,6 @@ aac-datasets~=0.5.0
 aac-metrics~=0.5.3
 black~=24.8.0
 conette~=0.1.4
-torch==2.2.1
-torch-tensorrt==2.6.0
+numpy~=1.26
+yt-dlp~=2025.2.19
+torch==2.2.1+cu118  --index-url https://download.pytorch.org/whl/cu118
