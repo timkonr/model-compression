@@ -120,7 +120,9 @@ def main():
     student_config.intermediate_size = 512
     student_config.num_hidden_layers = 3  # Shallower
     student_model = CoNeTTEModel(student_config)
-    student_model.model.tokenizers[0] = teacher_model.model.tokenizers[0]
+    print(teacher_model.model.tokenizers.keys())
+
+    student_model.model.tokenizers["0"] = teacher_model.model.tokenizers["0"]
 
     # Datasets
     print("Load data")
