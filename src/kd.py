@@ -15,17 +15,22 @@ def distillation_loss(
     # Soft Targets Loss
     teacher_probs = nn.functional.softmax(teacher_preds / temperature, dim=-1)
     student_probs = nn.functional.softmax(student_preds / temperature, dim=-1)
-    kd_loss = nn.functional.kl_div(
-        student_probs, teacher_probs, reduction="batchmean"
-    ) * (temperature**2)
+    # kd_loss = nn.functional.kl_div(
+    #     student_probs, teacher_probs, reduction="batchmean"
+    # ) * (temperature**2)
 
-    # Hard Targets Loss (cross-entropy loss for ground-truth)
-    ce_loss = nn.CrossEntropyLoss()(
-        student_preds.view(-1, student_preds.size(-1)), ground_truth.view(-1)
+    # # Hard Targets Loss (cross-entropy loss for ground-truth)
+    # ce_loss = nn.CrossEntropyLoss()(
+    #     student_preds.view(-1, student_preds.size(-1)), ground_truth.view(-1)
+    # )
+
+    # # Combine losses
+    # return alpha * kd_loss + (1 - alpha) * ce_loss
+    # Compute KL divergence between the student and teacher probabilities
+    kd_loss = nn.functional.F.kl_div(
+        student_probs.log(), teacher_probs, reduction="batchmean"
     )
-
-    # Combine losses
-    return alpha * kd_loss + (1 - alpha) * ce_loss
+    return kd_loss
 
 
 def train_distillation(
