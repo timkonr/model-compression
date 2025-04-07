@@ -54,17 +54,17 @@ def train_distillation(
         total_loss = 0.0
 
         for batch in train_loader:
-            inputs, labels = batch["audio"].to(device), batch["labels"].to(device)
+            inputs, labels = batch["audio"], batch["captions"]
 
             with torch.no_grad():
                 teacher_outputs = teacher_model(inputs)
-                teacher_logits = teacher_outputs["logits"]
+                teacher_preds = teacher_outputs["preds"]
 
             student_outputs = student_model(inputs)
-            student_logits = student_outputs["logits"]
+            student_preds = student_outputs["preds"]
 
             loss = distillation_loss(
-                student_logits, teacher_logits, labels, alpha, temperature
+                student_preds, teacher_preds, labels, alpha, temperature
             )
 
             optimizer.zero_grad()
