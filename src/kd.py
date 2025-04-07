@@ -14,7 +14,7 @@ def distillation_loss(
 ):
     # Soft Targets Loss
     teacher_probs = nn.functional.softmax(teacher_preds / temperature, dim=-1)
-    student_probs = nn.functional.log_softmax(student_preds / temperature, dim=-1)
+    student_probs = nn.functional.softmax(student_preds / temperature, dim=-1)
     kd_loss = nn.functional.kl_div(
         student_probs, teacher_probs, reduction="batchmean"
     ) * (temperature**2)
