@@ -27,7 +27,7 @@ def distillation_loss(
     # # Combine losses
     # return alpha * kd_loss + (1 - alpha) * ce_loss
     # Compute KL divergence between the student and teacher probabilities
-    kd_loss = nn.functional.F.kl_div(
+    kd_loss = nn.functional.kl_div(
         student_probs.log(), teacher_probs, reduction="batchmean"
     )
     return kd_loss
