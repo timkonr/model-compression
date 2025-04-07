@@ -5,16 +5,17 @@ from torch.utils.data import DataLoader
 from conette import CoNeTTEModel, CoNeTTEConfig
 from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
+from sentence_transformers import SentenceTransformer
 
 # from loss import CrossEntropyLoss
 
 
 def distillation_loss(
-    student_preds, teacher_preds, ground_truth, alpha=0.5, temperature=2.0
+    student_output, teacher_output, device, alpha=0.5, temperature=2.0
 ):
     # Soft Targets Loss
-    teacher_probs = nn.functional.softmax(teacher_preds / temperature, dim=-1)
-    student_probs = nn.functional.softmax(student_preds / temperature, dim=-1)
+    # teacher_probs = nn.functional.softmax(teacher_preds / temperature, dim=-1)
+    # student_probs = nn.functional.softmax(student_preds / temperature, dim=-1)
     # kd_loss = nn.functional.kl_div(
     #     student_probs, teacher_probs, reduction="batchmean"
     # ) * (temperature**2)
@@ -27,10 +28,13 @@ def distillation_loss(
     # # Combine losses
     # return alpha * kd_loss + (1 - alpha) * ce_loss
     # Compute KL divergence between the student and teacher probabilities
-    kd_loss = nn.functional.kl_div(
-        student_probs.log(), teacher_probs, reduction="batchmean"
-    )
-    return kd_loss
+    sbert = SentenceTransformer("all-MiniLM-L6-v2").to(device)
+
+    student_embed = sbert.encode(student_output["cands"], convert_to_tensor=True)
+    teacher_embed = sbert.encode(teacher_output["cands"], convert_to_tensor=True)
+
+    loss = torch.nn.functional.mse_loss(student_embed, teacher_embed)
+    return loss
 
 
 def train_distillation(
@@ -69,7 +73,7 @@ def train_distillation(
             student_preds = student_outputs["preds"]
 
             loss = distillation_loss(
-                student_preds, teacher_preds, labels, alpha, temperature
+                student_outputs, teacher_outputs, device, alpha, temperature
             )
 
             optimizer.zero_grad()
