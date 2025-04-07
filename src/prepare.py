@@ -14,6 +14,8 @@ def main():
     os.makedirs("data", exist_ok=True)
     if not os.path.isdir("./data/CLOTHO_v2.1"):
         Clotho("data", subset="eval", download=True)
+        Clotho("data", subset="val", download=True)
+        Clotho("data", subset="dev", download=True)
     AudioCaps("data", subset="val", download=True, verify_files=True)
     remove_corrupted_files()
 
