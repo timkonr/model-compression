@@ -6,25 +6,25 @@ from conette import CoNeTTEModel, CoNeTTEConfig
 from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
 
+# from loss import CrossEntropyLoss
+
 
 def distillation_loss(
-    student_logits, teacher_logits, ground_truth, alpha=0.5, temperature=2.0
+    student_preds, teacher_preds, ground_truth, alpha=0.5, temperature=2.0
 ):
-    """
-    Compute the knowledge distillation loss combining soft (KL) and hard (CE) targets.
-    """
-    # Soft Targets Loss (KL Divergence)
-    teacher_probs = torch.nn.functional.softmax(teacher_logits / temperature, dim=-1)
-    student_log_probs = torch.nn.functional.log_softmax(
-        student_logits / temperature, dim=-1
-    )
-    kd_loss = torch.nn.functional.kl_div(
-        student_log_probs, teacher_probs, reduction="batchmean"
+    # Soft Targets Loss
+    teacher_probs = nn.functional.softmax(teacher_preds / temperature, dim=-1)
+    student_probs = nn.functional.log_softmax(student_preds / temperature, dim=-1)
+    kd_loss = nn.functional.kl_div(
+        student_probs, teacher_probs, reduction="batchmean"
     ) * (temperature**2)
 
-    # Hard Targets Loss (Cross Entropy)
-    ce_loss = torch.nn.CrossEntropyLoss()(student_logits, ground_truth)
+    # Hard Targets Loss (cross-entropy loss for ground-truth)
+    ce_loss = nn.CrossEntropyLoss()(
+        student_preds.view(-1, student_preds.size(-1)), ground_truth.view(-1)
+    )
 
+    # Combine losses
     return alpha * kd_loss + (1 - alpha) * ce_loss
 
 
