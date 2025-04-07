@@ -113,13 +113,11 @@ def evaluate_student(model: nn.Module, val_loader: DataLoader, device: torch.dev
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    model_path = "./model/"
     # Load teacher (pretrained)
     print("Load teacher")
-    teacher_config = CoNeTTEConfig.from_pretrained("Labbeti/conette")
-    teacher_model = CoNeTTEModel.from_pretrained(
-        "Labbeti/conette", config=teacher_config
-    )
+    teacher_config = CoNeTTEConfig.from_pretrained(model_path)
+    teacher_model = CoNeTTEModel.from_pretrained(model_path, config=teacher_config)
 
     print("Define student")
     # Define a smaller student model
