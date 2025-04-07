@@ -123,8 +123,8 @@ def main():
 
     # Datasets
     print("Load data")
-    train_dataset = Clotho("data", subset="dev", download=True)
-    val_dataset = Clotho("data", subset="val", download=True)
+    train_dataset = Clotho("data", subset="dev")
+    val_dataset = Clotho("data", subset="val")
 
     # Dataloaders
     train_loader = DataLoader(
