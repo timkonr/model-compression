@@ -1,12 +1,16 @@
 import torch
 from conette import CoNeTTEConfig, CoNeTTEModel
-from prune import prune, use_torch_pruning
+from prune import use_torch_pruning
+import config
 
 
-def load_model(model_path="./model/", quantized=False, pruned=False):
+def load_model(model_path="./model/", quantized=False, pruned=False, kd=False):
     print("loading model")
-    config = CoNeTTEConfig.from_pretrained(model_path)
-    model = CoNeTTEModel.from_pretrained(model_path, config=config)
+    model = CoNeTTEModel.from_pretrained(
+        model_path, config=CoNeTTEConfig.from_pretrained(model_path)
+    )
+    if kd:
+        model = torch.load(config.kd_model)
     if quantized:
         # GPU quantization doesn't work atm, because it is still in alpha or beta for pytorch
         # i.e. it actually would work, but only for a fixed input shape,

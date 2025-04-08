@@ -178,7 +178,6 @@ def main():
         transformer,
         device,
         num_epochs=20,
-        save_path="best_student_model.pth",
     )
 
 

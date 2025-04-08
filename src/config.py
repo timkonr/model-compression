@@ -6,4 +6,6 @@ save_inference_results = True
 evaluation = True
 baseline = False  # Inference on baseline model
 quantization = False  # Inference on quantized model
-pruning = True  # Inference on pruned model
+pruning = False  # Inference on pruned model
+kd = True  # Inference on saved kd model
+kd_model = "best_student_model.pth"  # Path to kd model

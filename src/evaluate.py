@@ -76,7 +76,8 @@ def prepare_models():
         )
     if config.pruning:
         models_to_eval.append({"model": load_model(pruned=True), "name": "pruned"})
-
+    if config.kd:
+        models_to_eval.append({"model": load_model(kd=True), "name": "kd"})
     return models_to_eval
 
 
@@ -88,7 +89,6 @@ def inference(model: CoNeTTEModel, data_loader):
     start = perf_counter()
     with torch.no_grad():
         for i, batch in enumerate(data_loader):
-            # print(f"Batch {i}: {batch['fname']}")
             audio = batch["audio"]
             sr = batch["sr"]
 
@@ -116,7 +116,9 @@ def perform_inference(verbose, cpu):
             model["model"].to("cpu")
         model_size_mb = get_model_size(model["model"])
         model_params = get_model_params(model["model"])
-        print(f"starting inference on model {model['name']}")
+        print(
+            f"starting inference on model {model['name']}, model size: {model_size_mb}"
+        )
 
         predictions, references, inference_time = inference(
             model["model"], data_loader=loader
