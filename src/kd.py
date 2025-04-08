@@ -29,9 +29,40 @@ def distillation_loss(
     # return alpha * kd_loss + (1 - alpha) * ce_loss
     # Compute KL divergence between the student and teacher probabilities
     sbert = SentenceTransformer("all-MiniLM-L6-v2").to(device)
+    sbert.eval()
+    # student_embed = sbert.encode(student_output["cands"], convert_to_tensor=True)
+    # teacher_embed = sbert.encode(teacher_output["cands"], convert_to_tensor=True)
 
-    student_embed = sbert.encode(student_output["cands"], convert_to_tensor=True)
-    teacher_embed = sbert.encode(teacher_output["cands"], convert_to_tensor=True)
+    # loss = torch.nn.functional.mse_loss(student_embed, teacher_embed)
+    # return loss
+    # Tokenize student + teacher outputs
+    tokenizer = sbert.tokenizer
+    transformer = sbert[0]  # The Transformer model (MiniLM)
+    pooling = sbert[1]  # The Pooling layer
+    student_tokens = tokenizer(
+        student_output["cands"], padding=True, truncation=True, return_tensors="pt"
+    ).to(device)
+    teacher_tokens = tokenizer(
+        teacher_output["cands"], padding=True, truncation=True, return_tensors="pt"
+    ).to(device)
+
+    # Forward pass manually to get embeddings (with grads!)
+    with torch.set_grad_enabled(True):
+        student_trans_out = transformer(student_tokens)["last_hidden_state"]
+        student_embed = pooling(
+            {
+                "token_embeddings": student_trans_out,
+                "attention_mask": student_tokens["attention_mask"],
+            }
+        )["sentence_embedding"]
+
+        teacher_trans_out = transformer(teacher_tokens)["last_hidden_state"]
+        teacher_embed = pooling(
+            {
+                "token_embeddings": teacher_trans_out,
+                "attention_mask": teacher_tokens["attention_mask"],
+            }
+        )["sentence_embedding"]
 
     loss = torch.nn.functional.mse_loss(student_embed, teacher_embed)
     return loss
