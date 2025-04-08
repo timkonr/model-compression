@@ -10,7 +10,7 @@ def main():
     model = CoNeTTEModel.from_pretrained(
         "Labbeti/conette", config=CoNeTTEConfig.from_pretrained("Labbeti/conette")
     )
-    model.save_pretrained("./model/")
+    model.save_pretrained("./model/baseline/")
 
     # Download dataset
     os.makedirs("data", exist_ok=True)

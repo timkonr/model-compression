@@ -6,8 +6,9 @@ import config
 
 def load_model(model_path="./model/", quantized=False, pruned=False, kd=False):
     print("loading model")
+    baseline_path = model_path + "baseline/"
     model = CoNeTTEModel.from_pretrained(
-        model_path, config=CoNeTTEConfig.from_pretrained(model_path)
+        baseline_path, config=CoNeTTEConfig.from_pretrained(baseline_path)
     )
     if kd:
         model = torch.load(f"{model_path}{config.kd_model}")
