@@ -6,39 +6,27 @@ from conette import CoNeTTEModel, CoNeTTEConfig
 from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
 from sentence_transformers import SentenceTransformer
+from transformers import AutoTokenizer, AutoModel
 
-# from loss import CrossEntropyLoss
+
+# Mean pooling
+def mean_pooling(model_output, attention_mask):
+    token_embeddings = model_output.last_hidden_state  # [B, T, H]
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size())
+    return torch.sum(
+        token_embeddings * input_mask_expanded, 1
+    ) / input_mask_expanded.sum(1)
 
 
 def distillation_loss(
     student_output, teacher_output, device, alpha=0.5, temperature=2.0
 ):
-    # Soft Targets Loss
-    # teacher_probs = nn.functional.softmax(teacher_preds / temperature, dim=-1)
-    # student_probs = nn.functional.softmax(student_preds / temperature, dim=-1)
-    # kd_loss = nn.functional.kl_div(
-    #     student_probs, teacher_probs, reduction="batchmean"
-    # ) * (temperature**2)
+    # Load HuggingFace backbone directly
+    model_name = "sentence-transformers/all-MiniLM-L6-v2"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    transformer = AutoModel.from_pretrained(model_name).to(device)
 
-    # # Hard Targets Loss (cross-entropy loss for ground-truth)
-    # ce_loss = nn.CrossEntropyLoss()(
-    #     student_preds.view(-1, student_preds.size(-1)), ground_truth.view(-1)
-    # )
-
-    # # Combine losses
-    # return alpha * kd_loss + (1 - alpha) * ce_loss
-    # Compute KL divergence between the student and teacher probabilities
-    sbert = SentenceTransformer("all-MiniLM-L6-v2").to(device)
-    sbert.eval()
-    # student_embed = sbert.encode(student_output["cands"], convert_to_tensor=True)
-    # teacher_embed = sbert.encode(teacher_output["cands"], convert_to_tensor=True)
-
-    # loss = torch.nn.functional.mse_loss(student_embed, teacher_embed)
-    # return loss
-    # Tokenize student + teacher outputs
-    tokenizer = sbert.tokenizer
-    transformer = sbert[0]  # The Transformer model (MiniLM)
-    pooling = sbert[1]  # The Pooling layer
+    # Tokenize input
     student_tokens = tokenizer(
         student_output["cands"], padding=True, truncation=True, return_tensors="pt"
     ).to(device)
@@ -46,25 +34,18 @@ def distillation_loss(
         teacher_output["cands"], padding=True, truncation=True, return_tensors="pt"
     ).to(device)
 
-    # Forward pass manually to get embeddings (with grads!)
-    with torch.set_grad_enabled(True):
-        student_trans_out = transformer(student_tokens)["last_hidden_state"]
-        student_embed = pooling(
-            {
-                "token_embeddings": student_trans_out,
-                "attention_mask": student_tokens["attention_mask"],
-            }
-        )["sentence_embedding"]
+    # Forward pass (grad-enabled for student)
+    student_out = transformer(**student_tokens)
+    teacher_out = transformer(**teacher_tokens)
 
-        teacher_trans_out = transformer(teacher_tokens)["last_hidden_state"]
-        teacher_embed = pooling(
-            {
-                "token_embeddings": teacher_trans_out,
-                "attention_mask": teacher_tokens["attention_mask"],
-            }
-        )["sentence_embedding"]
+    student_embed = mean_pooling(
+        student_out, student_tokens["attention_mask"]
+    )  # grads enabled
+    with torch.no_grad():  # freeze teacher
+        teacher_embed = mean_pooling(teacher_out, teacher_tokens["attention_mask"])
 
-    loss = torch.nn.functional.mse_loss(student_embed, teacher_embed)
+    # Loss
+    loss = nn.functional.mse_loss(student_embed, teacher_embed)
     return loss
 
 
