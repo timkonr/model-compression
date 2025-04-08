@@ -133,13 +133,12 @@ def main():
 
     print("Define student")
     # Define a smaller student model
-    student_config = CoNeTTEConfig.from_pretrained("Labbeti/conette")
+    student_config = CoNeTTEConfig.from_pretrained(model_path)
     student_config.hidden_size = 256
     student_config.num_attention_heads = 4
     student_config.intermediate_size = 512
     student_config.num_hidden_layers = 3  # Shallower
     student_model = CoNeTTEModel(student_config)
-    print(teacher_model.model.tokenizers.keys())
 
     student_model.model.tokenizers["0"] = teacher_model.model.tokenizers["0"]
 
