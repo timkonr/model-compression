@@ -50,7 +50,7 @@ def distillation_loss(student_output, teacher_output, tokenizer, transformer, de
     return loss
 
 
-def validate_student(model, val_loader, tokenizer, transformer, device):
+def validate_student(model, teacher_model, val_loader, tokenizer, transformer, device):
     model.eval()
     total_loss = 0.0
     count = 0
@@ -59,9 +59,8 @@ def validate_student(model, val_loader, tokenizer, transformer, device):
         for batch in val_loader:
             inputs = batch["audio"]
             student_output = model(inputs)["cands"]
-            teacher_output = model(inputs)[
-                "cands"
-            ]  # Assuming we use self-teacher for simplicity
+            teacher_output = teacher_model(inputs)["cands"]
+            # Assuming we use self-teacher for simplicity
 
             loss = distillation_loss(
                 student_output, teacher_output, tokenizer, transformer, device
@@ -112,7 +111,7 @@ def train_distillation(
         print(f"[Epoch {epoch+1}] Training Loss: {avg_train_loss:.4f}")
 
         val_loss = validate_student(
-            student_model, val_loader, tokenizer, transformer, device
+            student_model, teacher_model, val_loader, tokenizer, transformer, device
         )
         print(f"[Epoch {epoch+1}] Validation Loss: {val_loss:.4f}")
 
