@@ -23,6 +23,7 @@ def mean_pooling(model_output, attention_mask):
 
 
 def distillation_loss(student_output, teacher_output, tokenizer, transformer, device):
+    # Tokenize the input sentences (if not already tokenized)
     student_tokens = tokenizer(
         student_output, padding=True, truncation=True, return_tensors="pt"
     ).to(device)
@@ -30,14 +31,22 @@ def distillation_loss(student_output, teacher_output, tokenizer, transformer, de
         teacher_output, padding=True, truncation=True, return_tensors="pt"
     ).to(device)
 
+    # Get embeddings from the transformer model (typically last_hidden_state)
     student_out = transformer(**student_tokens)
     teacher_out = transformer(**teacher_tokens)
 
+    # Get the embeddings (mean pooling over the token embeddings)
     student_embed = mean_pooling(student_out, student_tokens["attention_mask"])
-    with torch.no_grad():
+    with torch.no_grad():  # Freeze teacher embeddings
         teacher_embed = mean_pooling(teacher_out, teacher_tokens["attention_mask"])
 
+    # Check that the embeddings have the same shape
+    print(f"Student Embed Shape: {student_embed.shape}, embedding: {student_embed}")
+    print(f"Teacher Embed Shape: {teacher_embed.shape}, embedding: {teacher_embed}")
+
+    # Compute MSE loss between student and teacher embeddings
     loss = nn.functional.mse_loss(student_embed, teacher_embed)
+
     return loss
 
 
