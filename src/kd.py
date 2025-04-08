@@ -10,7 +10,7 @@ from conette import CoNeTTEModel, CoNeTTEConfig
 from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
 from transformers import AutoTokenizer, AutoModel
-from aac_metrics import evaluate
+from utils import get_model_params
 
 
 # Mean pooling
@@ -138,6 +138,9 @@ def main():
     student_config.num_hidden_layers = 3
     student_model = CoNeTTEModel(student_config)
     student_model.model.tokenizers["0"] = teacher_model.model.tokenizers["0"]
+
+    print("Teacher Params:", get_model_params(teacher_model))
+    print("Student Params:", get_model_params(student_model))
 
     # Datasets
     print("Load data")
