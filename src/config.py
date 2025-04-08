@@ -1,4 +1,5 @@
 dataset = "clotho"  # clotho | audiocaps
+download_audiocaps = False  # used only in prepare script
 metrics = "all"  # see aac_metrics.functional.evaluate
 inference = True
 save_inference_results = True

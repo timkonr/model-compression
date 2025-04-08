@@ -2,12 +2,14 @@ from conette import CoNeTTEConfig, CoNeTTEModel
 from aac_datasets import Clotho, AudioCaps
 import os
 import torchaudio
+import config
 
 
 def main():
     # Download model
-    config = CoNeTTEConfig.from_pretrained("Labbeti/conette")
-    model = CoNeTTEModel.from_pretrained("Labbeti/conette", config=config)
+    model = CoNeTTEModel.from_pretrained(
+        "Labbeti/conette", config=CoNeTTEConfig.from_pretrained("Labbeti/conette")
+    )
     model.save_pretrained("./model/")
 
     # Download dataset
@@ -16,8 +18,9 @@ def main():
         Clotho("data", subset="eval", download=True)
         Clotho("data", subset="val", download=True)
         Clotho("data", subset="dev", download=True)
-    AudioCaps("data", subset="val", download=True, verify_files=True)
-    remove_corrupted_files()
+    if config.download_audiocaps:
+        AudioCaps("data", subset="val", download=True, verify_files=True)
+        remove_corrupted_files()
 
 
 def remove_corrupted_files():
