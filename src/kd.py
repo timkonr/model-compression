@@ -1,3 +1,7 @@
+import os
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
