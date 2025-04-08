@@ -152,14 +152,14 @@ def main():
         train_dataset,
         batch_size=32,
         shuffle=True,
-        num_workers=4,
+        num_workers=2,
         collate_fn=BasicCollate(),
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=32,
         shuffle=False,
-        num_workers=4,
+        num_workers=2,
         collate_fn=BasicCollate(),
     )
 
