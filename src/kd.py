@@ -82,7 +82,7 @@ def train_distillation(
     transformer,
     device,
     num_epochs: int = 10,
-    save_path: str = "best_student_model.pth",
+    save_path: str = "model/best_student_model.pth",
 ):
     teacher_model.to(device).eval()
     student_model.to(device)
