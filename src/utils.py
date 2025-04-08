@@ -10,7 +10,7 @@ def load_model(model_path="./model/", quantized=False, pruned=False, kd=False):
         model_path, config=CoNeTTEConfig.from_pretrained(model_path)
     )
     if kd:
-        model = torch.load(config.kd_model)
+        model = torch.load(f"{model_path}{config.kd_model}")
     if quantized:
         # GPU quantization doesn't work atm, because it is still in alpha or beta for pytorch
         # i.e. it actually would work, but only for a fixed input shape,
