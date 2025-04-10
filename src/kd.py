@@ -1,12 +1,10 @@
 import os
-
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from conette import CoNeTTEModel, CoNeTTEConfig
+
+from conette import CoNeTTEModel, CoNeTTEConfig  # existing imports
 from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
 from transformers import AutoTokenizer, AutoModel
@@ -69,17 +67,14 @@ def validate_student(
     return total_loss / count
 
 
-# Define a custom ConvNeXt block with a signature matching its internal design
+# Define a custom ConvNeXt block with a compatible signature
 class SmallConvNeXtBlock(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
-        # Depthwise convolution with kernel size 7, padding 3, groups=in_channels
         self.dwconv = nn.Conv2d(
             in_channels, in_channels, kernel_size=7, padding=3, groups=in_channels
         )
-        # Since LayerNorm works on last dimension, we will permute dimensions later
         self.norm = nn.LayerNorm(in_channels)
-        # Pointwise convolution implemented as Linear layers
         self.pwconv1 = nn.Linear(in_channels, in_channels * 4)
         self.act = nn.GELU()
         self.pwconv2 = nn.Linear(in_channels * 4, in_channels)
@@ -89,7 +84,7 @@ class SmallConvNeXtBlock(nn.Module):
         # x: [B, C, H, W]
         residual = x
         x = self.dwconv(x)  # [B, C, H, W]
-        x = x.permute(0, 2, 3, 1)  # [B, H, W, C] for LayerNorm and Linear
+        x = x.permute(0, 2, 3, 1)  # [B, H, W, C]
         x = self.norm(x)
         x = self.pwconv1(x)
         x = self.act(x)
@@ -99,7 +94,7 @@ class SmallConvNeXtBlock(nn.Module):
         return x + residual
 
 
-# Example custom smaller ConvNeXt encoder
+# Updated custom encoder that accepts extra arguments (if any)
 class SmallConvNeXtEncoder(nn.Module):
     def __init__(self, original_encoder):
         """
@@ -114,12 +109,12 @@ class SmallConvNeXtEncoder(nn.Module):
         self.speed_perturb = original_encoder.speed_perturb
         self.bn0 = original_encoder.bn0
 
-        # Build new downsample layers with smaller output channels
+        # Build new downsampling layers with smaller output channels
         self.downsample_layers = nn.ModuleList(
             [
                 nn.Sequential(
                     nn.Conv2d(1, 64, kernel_size=(4, 4), stride=(4, 4), padding=(4, 0)),
-                    nn.LayerNorm([64, 1, 1]),  # Note: Adjust shape if needed
+                    nn.LayerNorm([64, 1, 1]),  # Adjust shape if needed
                 ),
                 nn.Sequential(
                     nn.LayerNorm(64),
@@ -150,19 +145,25 @@ class SmallConvNeXtEncoder(nn.Module):
         # Final normalization layer for output features
         self.norm = nn.LayerNorm(512)  # final channels = 512
 
-    def forward(self, x):
-        # Apply preprocessing steps
+    def forward(self, *args, **kwargs):
+        """
+        Accept extra positional and keyword arguments so that the call signature
+        matches the original encoder. We'll only use the first positional argument as input.
+        """
+        x = args[0]  # assume the first positional argument is the input tensor
+
+        # Preprocessing
         x = self.spectrogram_extractor(x)
         x = self.logmel_extractor(x)
         x = self.spec_augmenter(x)
         x = self.speed_perturb(x)
         x = self.bn0(x)
 
-        # Apply downsampling layers
+        # Downsampling layers
         for layer in self.downsample_layers:
             x = layer(x)
 
-        # Apply each stage sequentially
+        # ConvNeXt stages
         for stage in self.stages:
             x = stage(x)
 
@@ -173,7 +174,7 @@ class SmallConvNeXtEncoder(nn.Module):
         return x
 
 
-# Custom projection layer: maps encoder output dimension (512) to decoder's expected dimension (e.g., 256)
+# Custom projection layer: maps encoder output (512) to decoder expected dimension (256)
 class CustomProjection(nn.Module):
     def __init__(self, in_dim=512, out_dim=256):
         super().__init__()
@@ -187,7 +188,7 @@ class CustomProjection(nn.Module):
 # Main training function incorporating the student model with the custom smaller encoder
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_path = "./model/baseline/"
+    model_path = "./model/"
     print("Loading teacher")
     teacher_config = CoNeTTEConfig.from_pretrained(model_path)
     teacher_model = CoNeTTEModel.from_pretrained(model_path, config=teacher_config)
@@ -247,7 +248,6 @@ def main():
         total_loss = 0.0
         for batch in train_loader:
             inputs = batch["audio"]
-            # Get teacher output (evaluation mode, so no gradient)
             with torch.no_grad():
                 teacher_output = teacher_model(inputs)["cands"]
             student_output = student_model(inputs)["cands"]
@@ -268,7 +268,7 @@ def main():
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(student_model.state_dict(), "model/best_student_model.pth")
+            torch.save(student_model.state_dict(), "best_student_model.pth")
             print("Saved best student model.")
 
 
