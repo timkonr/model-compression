@@ -13,7 +13,7 @@ from transformers import AutoTokenizer, AutoModel
 from aac_metrics import evaluate
 
 
-# Mean pooling
+# Mean pooling helper (unchanged)
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output.last_hidden_state
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size())
@@ -69,36 +69,57 @@ def validate_student(
     return total_loss / count
 
 
+# Define a custom ConvNeXt block with a signature matching its internal design
+class SmallConvNeXtBlock(nn.Module):
+    def __init__(self, in_channels):
+        super().__init__()
+        # Depthwise convolution with kernel size 7, padding 3, groups=in_channels
+        self.dwconv = nn.Conv2d(
+            in_channels, in_channels, kernel_size=7, padding=3, groups=in_channels
+        )
+        # Since LayerNorm works on last dimension, we will permute dimensions later
+        self.norm = nn.LayerNorm(in_channels)
+        # Pointwise convolution implemented as Linear layers
+        self.pwconv1 = nn.Linear(in_channels, in_channels * 4)
+        self.act = nn.GELU()
+        self.pwconv2 = nn.Linear(in_channels * 4, in_channels)
+        self.drop_path = nn.Identity()  # Replace with DropPath if needed
+
+    def forward(self, x):
+        # x: [B, C, H, W]
+        residual = x
+        x = self.dwconv(x)  # [B, C, H, W]
+        x = x.permute(0, 2, 3, 1)  # [B, H, W, C] for LayerNorm and Linear
+        x = self.norm(x)
+        x = self.pwconv1(x)
+        x = self.act(x)
+        x = self.pwconv2(x)
+        x = x.permute(0, 3, 1, 2)  # Back to [B, C, H, W]
+        x = self.drop_path(x)
+        return x + residual
+
+
 # Example custom smaller ConvNeXt encoder
 class SmallConvNeXtEncoder(nn.Module):
     def __init__(self, original_encoder):
         """
-        Create a slimmed-down encoder based on the original ConvNeXt encoder.
-        This example assumes you can re-use the same building blocks but modify:
-          - The number of channels per stage
-          - The number of blocks per stage
+        Construct a slimmed-down encoder.
+        This example reinitializes the downsampling layers and stages with lower widths and fewer blocks.
         """
         super().__init__()
-        # You likely have a preprocessor that includes:
-        # spectrogram_extractor, logmel_extractor, etc.
-        # We extract relevant parts from the original encoder:
+        # Retain preprocessing parts from original encoder
         self.spectrogram_extractor = original_encoder.spectrogram_extractor
         self.logmel_extractor = original_encoder.logmel_extractor
         self.spec_augmenter = original_encoder.spec_augmenter
         self.speed_perturb = original_encoder.speed_perturb
         self.bn0 = original_encoder.bn0
 
-        # Downsampling layers can be reused if dimensions still match:
-        # (We assume these layers produce a slightly different channel count now)
-        # Option 1: Adapt these as well. Option 2: reinitialize them.
-        # Here we reinitialize for simplicity.
+        # Build new downsample layers with smaller output channels
         self.downsample_layers = nn.ModuleList(
             [
                 nn.Sequential(
                     nn.Conv2d(1, 64, kernel_size=(4, 4), stride=(4, 4), padding=(4, 0)),
-                    nn.LayerNorm(
-                        [64, 1, 1]
-                    ),  # dummy shape for LayerNorm; adjust accordingly
+                    nn.LayerNorm([64, 1, 1]),  # Note: Adjust shape if needed
                 ),
                 nn.Sequential(
                     nn.LayerNorm(64),
@@ -115,75 +136,44 @@ class SmallConvNeXtEncoder(nn.Module):
             ]
         )
 
-        # Rebuild the stages with fewer ConvNeXt blocks:
-        # For example, teacher stages might be: [3, 3, 9, 3]
-        # We propose: [2, 2, 6, 2]
-        # We assume there is a ConvNeXtBlock class available
-        ConvNeXtBlock = original_encoder.stages[0][0].__class__  # infer block class
-
-        # Define each stage
-        self.stages = nn.ModuleList()
-        stage_dims = [64, 128, 256, 512]
+        # Build stages with our custom small block.
+        # Proposed depths: [2, 2, 6, 2] for the four stages.
         stage_depths = [2, 2, 6, 2]
-        for stage_idx, depth in enumerate(stage_depths):
+        stage_channels = [64, 128, 256, 512]
+        self.stages = nn.ModuleList()
+        for channels, depth in zip(stage_channels, stage_depths):
             blocks = []
-            # For each block, adjust the in/out dimensions accordingly:
             for _ in range(depth):
-                blocks.append(
-                    ConvNeXtBlock(
-                        # You need to check what arguments ConvNeXtBlock requires.
-                        # Here we assume it takes: (in_channels, expansion_channels).
-                        # We use stage_dims[stage_idx] and multiply by 4 for expansion.
-                        # In the teacher, these were (e.g.) 96->384; now, 64->256.
-                        dwconv=nn.Conv2d(
-                            stage_dims[stage_idx],
-                            stage_dims[stage_idx],
-                            kernel_size=7,
-                            stride=1,
-                            padding=3,
-                            groups=stage_dims[stage_idx],
-                        ),
-                        norm=nn.LayerNorm(stage_dims[stage_idx]),
-                        pwconv1=nn.Linear(
-                            stage_dims[stage_idx], stage_dims[stage_idx] * 4
-                        ),
-                        act=nn.GELU(),
-                        pwconv2=nn.Linear(
-                            stage_dims[stage_idx] * 4, stage_dims[stage_idx]
-                        ),
-                        drop_path=nn.Identity(),
-                    )
-                )
+                blocks.append(SmallConvNeXtBlock(in_channels=channels))
             self.stages.append(nn.Sequential(*blocks))
 
-        # Final normalization (adjust dimension to match last stage channels)
-        self.norm = nn.LayerNorm(512)  # since the final stage now has 512 channels
+        # Final normalization layer for output features
+        self.norm = nn.LayerNorm(512)  # final channels = 512
 
     def forward(self, x):
-        # x: raw waveform or preprocessed spectrogram input
-        # Process through extractor, etc.
+        # Apply preprocessing steps
         x = self.spectrogram_extractor(x)
         x = self.logmel_extractor(x)
         x = self.spec_augmenter(x)
         x = self.speed_perturb(x)
         x = self.bn0(x)
 
-        # Pass x through the downsample layers sequentially.
+        # Apply downsampling layers
         for layer in self.downsample_layers:
             x = layer(x)
 
-        # Pass through each stage
+        # Apply each stage sequentially
         for stage in self.stages:
             x = stage(x)
 
-        # Flatten spatial dimensions (assume x is [B, C, H, W])
+        # Flatten spatial dimensions: [B, C, H, W] -> [B, tokens, C]
         B, C, H, W = x.shape
-        x = x.view(B, C, H * W).transpose(1, 2)  # shape [B, tokens, C]
+        x = x.view(B, C, H * W).transpose(1, 2)
         x = self.norm(x)
         return x
 
 
-# Example: create a custom projection layer mapping new encoder output dim (512) to decoder hidden size (256)
+# Custom projection layer: maps encoder output dimension (512) to decoder's expected dimension (e.g., 256)
 class CustomProjection(nn.Module):
     def __init__(self, in_dim=512, out_dim=256):
         super().__init__()
@@ -194,7 +184,7 @@ class CustomProjection(nn.Module):
         return self.relu(self.proj(x))
 
 
-# Main training function incorporating the student model with the custom encoder
+# Main training function incorporating the student model with the custom smaller encoder
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_path = "./model/baseline/"
@@ -204,30 +194,24 @@ def main():
     teacher_model.to(device).eval()
 
     print("Defining student")
-    # Load teacher config as baseline and then modify for a smaller encoder.
-    # Option A: If CoNeTTEConfig allows setting encoder parameters, do it via the config.
-    # Option B: Instantiate the teacher and then swap out the encoder.
+    # Instantiate student model based on teacher config
     student_config = CoNeTTEConfig.from_pretrained(model_path)
-
-    # Here, we will replace the teacher’s encoder with our custom SmallConvNeXtEncoder.
-    # Create a student model using the teacher config first.
     student_model = CoNeTTEModel(student_config)
-    # Replace encoder with our smaller version.
+
+    # Replace the encoder with our custom smaller encoder
     student_model.preprocessor.encoder = SmallConvNeXtEncoder(
         teacher_model.preprocessor.encoder
     )
 
-    # Replace projection layer to match new encoder output dimension (512 instead of 768)
+    # Replace the projection layer to map from 512 (new encoder output) to d_model (256)
     student_model.model.projection = nn.Sequential(
         nn.Dropout(p=0.5),
-        CustomProjection(
-            in_dim=512, out_dim=student_config.d_model
-        ),  # student_config.d_model usually 256
+        CustomProjection(in_dim=512, out_dim=student_config.d_model),
         nn.ReLU(),
         nn.Dropout(p=0.5),
     )
 
-    # Transfer the tokenizer from teacher (or keep the same, as appropriate)
+    # Transfer the tokenizer (ensuring vocabulary alignment)
     student_model.model.tokenizers["0"] = teacher_model.model.tokenizers["0"]
 
     print("Preparing data")
@@ -263,7 +247,7 @@ def main():
         total_loss = 0.0
         for batch in train_loader:
             inputs = batch["audio"]
-            # Teacher output computed in eval mode (no grad)
+            # Get teacher output (evaluation mode, so no gradient)
             with torch.no_grad():
                 teacher_output = teacher_model(inputs)["cands"]
             student_output = student_model(inputs)["cands"]
