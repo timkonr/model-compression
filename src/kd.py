@@ -1,10 +1,12 @@
 import os
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-
-from conette import CoNeTTEModel, CoNeTTEConfig  # existing imports
+from conette import CoNeTTEModel, CoNeTTEConfig
 from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
 from transformers import AutoTokenizer, AutoModel
@@ -188,7 +190,7 @@ class CustomProjection(nn.Module):
 # Main training function incorporating the student model with the custom smaller encoder
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_path = "./model/"
+    model_path = "./model/baseline/"
     print("Loading teacher")
     teacher_config = CoNeTTEConfig.from_pretrained(model_path)
     teacher_model = CoNeTTEModel.from_pretrained(model_path, config=teacher_config)
@@ -268,7 +270,7 @@ def main():
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(student_model.state_dict(), "best_student_model.pth")
+            torch.save(student_model.state_dict(), "model/best_student_model.pth")
             print("Saved best student model.")
 
 
