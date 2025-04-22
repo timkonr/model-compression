@@ -7,3 +7,4 @@ yt-dlp~=2025.2.19
 torch==2.2.1+cu118  --index-url https://download.pytorch.org/whl/cu118
 torch-pruning~=1.5.1
 torchvision==0.17.1
+transformers==4.39.3
