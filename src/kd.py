@@ -70,46 +70,69 @@ from torchvision.models import efficientnet_b2, EfficientNet_B2_Weights
 from torchvision.models.feature_extraction import create_feature_extractor
 
 
-class EfficientNetB2Encoder(nn.Module):
-    def __init__(self):
+class EfficientNetB2AudioEncoder(nn.Module):
+    def __init__(self, original_encoder):
         super().__init__()
-        # 1) Load torchvision’s EfficientNet‑B2 (pretrained)
-        weights = EfficientNet_B2_Weights.IMAGENET1K_V1
-        base_model = efficientnet_b2(weights=weights)
+        # 1) STFT + LogMel from the original ConvNeXt encoder
+        self.spectrogram_extractor = original_encoder.spectrogram_extractor
+        self.logmel_extractor = original_encoder.logmel_extractor
 
-        # 2) Replace the stem conv to accept 1‑channel input
-        stem_conv = base_model.features[0][0]  # Conv2d layer
-        if stem_conv.in_channels != 1:
+        # 2) (optional) your augmentation steps
+        self.spec_augmenter = original_encoder.spec_augmenter
+        self.speed_perturb = original_encoder.speed_perturb
+
+        # 3) Load torchvision’s EfficientNet-B2
+        weights = EfficientNet_B2_Weights.IMAGENET1K_V1
+        efb2 = efficientnet_b2(weights=weights)
+
+        # 4) Swap the stem to accept 1 channel
+        stem = efb2.features[0][0]
+        if stem.in_channels != 1:
             new_stem = nn.Conv2d(
                 1,
-                stem_conv.out_channels,
-                kernel_size=stem_conv.kernel_size,
-                stride=stem_conv.stride,
-                padding=stem_conv.padding,
+                stem.out_channels,
+                kernel_size=stem.kernel_size,
+                stride=stem.stride,
+                padding=stem.padding,
                 bias=False,
             )
-            # initialize by averaging pretrained weights over input channels
-            new_stem.weight.data = stem_conv.weight.data.mean(dim=1, keepdim=True)
-            base_model.features[0][0] = new_stem
+            # initialize by averaging the RGB weights
+            new_stem.weight.data = stem.weight.data.mean(dim=1, keepdim=True)
+            efb2.features[0][0] = new_stem
 
-        # 3) Use feature_extraction to grab the last conv feature map
-        #    In EfficientNet‑B2, features[7] is the final block
+        # 5) Grab only the final conv features
         return_nodes = {"features.7": "feat"}
-        self.extractor = create_feature_extractor(base_model, return_nodes=return_nodes)
+        self.extractor = create_feature_extractor(efb2, return_nodes=return_nodes)
 
-        # 4) Get the channel count by inspecting the classifier’s in_features
-        #    classifier = [Dropout, Linear(in_features=1408, out_features=1000)]
-        self.out_channels = base_model.classifier[1].in_features
+        # 6) read off out_channels from the classifier’s in_features
+        self.out_channels = efb2.classifier[1].in_features
 
-        # 5) LayerNorm over that channel dimension
+        # 7) final LayerNorm over that channel dimension
         self.norm = nn.LayerNorm(self.out_channels)
 
     def forward(self, *args, **kwargs):
-        # Accept extra args/kwargs; use the first positional as input
-        x = args[0]  # [B, 1, H, W] spectrogram
-        feats = self.extractor(x)["feat"]  # [B, C, H', W']
+        # CoNeTTE will call encoder(x, x_shapes).
+        # We only care about the waveform x = args[0].
+        wave = args[0]  # [B, T]
+        # --- STFT & LogMel ---
+        x = self.spectrogram_extractor(wave)  # yields [B, 513, time]
+        x = self.logmel_extractor(x)  # yields [B, 224, time]
+
+        # --- make it a 1‑channel “image” ---
+        x = x.unsqueeze(1)  # [B, 1, 224, time]
+
+        # --- optional audio augmentations ---
+        x = self.spec_augmenter(x)
+        x = self.speed_perturb(x)
+        while x.dim() > 4:
+            x = x.squeeze(2)
+
+        # --- EfficientNet feature extraction ---
+        print(">> encoder input shape:", x.shape)
+        feats = self.extractor(x)["feat"]  # [B, C=1408, H', W']
         B, C, H, W = feats.shape
-        # Flatten spatial dims to a token sequence
+
+        # flatten spatial → tokens
         out = feats.view(B, C, H * W).transpose(1, 2)  # [B, tokens, C]
         return self.norm(out)
 
@@ -139,18 +162,19 @@ def main():
     student_config = CoNeTTEConfig.from_pretrained(model_path)
     student_model = CoNeTTEModel(student_config)
 
-    # Replace the encoder with EfficientNet-B2 encoder.
-    student_model.preprocessor.encoder = EfficientNetB2Encoder()
+    student_model.preprocessor.encoder = EfficientNetB2AudioEncoder(
+        original_encoder=teacher_model.preprocessor.encoder
+    )
 
     # Replace the projection layer.
     # EfficientNet-B2's last feature dimension is stored in student_model.preprocessor.encoder.out_channels.
     student_model.model.projection = nn.Sequential(
-        nn.Dropout(0.5),
+        nn.Dropout(p=0.5),
         nn.Linear(
             student_model.preprocessor.encoder.out_channels, student_config.d_model
-        ),
+        ),  # e.g. 256
         nn.ReLU(),
-        nn.Dropout(0.5),
+        nn.Dropout(p=0.5),
     )
 
     # Transfer the tokenizer for consistent text processing.
