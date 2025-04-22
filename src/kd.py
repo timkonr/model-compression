@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from conette import CoNeTTEModel, CoNeTTEConfig
+from conette import CoNeTTEModel, CoNeTTEConfig  # existing imports from your code
 from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
 from transformers import AutoTokenizer, AutoModel
@@ -24,7 +24,6 @@ def mean_pooling(model_output, attention_mask):
 
 # Distillation loss comparing transformer-based sentence embeddings (unchanged)
 def distillation_loss(student_output, teacher_output, tokenizer, transformer, device):
-    # Tokenize the input sentences
     student_tokens = tokenizer(
         student_output, padding=True, truncation=True, return_tensors="pt"
     ).to(device)
@@ -32,21 +31,18 @@ def distillation_loss(student_output, teacher_output, tokenizer, transformer, de
         teacher_output, padding=True, truncation=True, return_tensors="pt"
     ).to(device)
 
-    # Get embeddings from the transformer
     student_out = transformer(**student_tokens)
     teacher_out = transformer(**teacher_tokens)
 
-    # Mean pooling to get sentence embeddings
     student_embed = mean_pooling(student_out, student_tokens["attention_mask"])
     with torch.no_grad():
         teacher_embed = mean_pooling(teacher_out, teacher_tokens["attention_mask"])
 
-    # MSE loss between embeddings
     loss = nn.functional.mse_loss(student_embed, teacher_embed)
     return loss
 
 
-# Change validation to use teacher_model for ground-truth outputs
+# Validation uses the teacher model for ground-truth outputs
 def validate_student(
     student_model, teacher_model, val_loader, tokenizer, transformer, device
 ):
@@ -69,116 +65,58 @@ def validate_student(
     return total_loss / count
 
 
-# Define a custom ConvNeXt block with a compatible signature
-class SmallConvNeXtBlock(nn.Module):
-    def __init__(self, in_channels):
+# Define a custom encoder wrapping EfficientNet-B2
+from torchvision.models import efficientnet_b2, EfficientNet_B2_Weights
+from torchvision.models.feature_extraction import create_feature_extractor
+
+
+class EfficientNetB2Encoder(nn.Module):
+    def __init__(self):
         super().__init__()
-        self.dwconv = nn.Conv2d(
-            in_channels, in_channels, kernel_size=7, padding=3, groups=in_channels
-        )
-        self.norm = nn.LayerNorm(in_channels)
-        self.pwconv1 = nn.Linear(in_channels, in_channels * 4)
-        self.act = nn.GELU()
-        self.pwconv2 = nn.Linear(in_channels * 4, in_channels)
-        self.drop_path = nn.Identity()  # Replace with DropPath if needed
+        # 1) Load torchvision’s EfficientNet‑B2 (pretrained)
+        weights = EfficientNet_B2_Weights.IMAGENET1K_V1
+        base_model = efficientnet_b2(weights=weights)
 
-    def forward(self, x):
-        # x: [B, C, H, W]
-        residual = x
-        x = self.dwconv(x)  # [B, C, H, W]
-        x = x.permute(0, 2, 3, 1)  # [B, H, W, C]
-        x = self.norm(x)
-        x = self.pwconv1(x)
-        x = self.act(x)
-        x = self.pwconv2(x)
-        x = x.permute(0, 3, 1, 2)  # Back to [B, C, H, W]
-        x = self.drop_path(x)
-        return x + residual
+        # 2) Replace the stem conv to accept 1‑channel input
+        stem_conv = base_model.features[0][0]  # Conv2d layer
+        if stem_conv.in_channels != 1:
+            new_stem = nn.Conv2d(
+                1,
+                stem_conv.out_channels,
+                kernel_size=stem_conv.kernel_size,
+                stride=stem_conv.stride,
+                padding=stem_conv.padding,
+                bias=False,
+            )
+            # initialize by averaging pretrained weights over input channels
+            new_stem.weight.data = stem_conv.weight.data.mean(dim=1, keepdim=True)
+            base_model.features[0][0] = new_stem
 
+        # 3) Use feature_extraction to grab the last conv feature map
+        #    In EfficientNet‑B2, features[7] is the final block
+        return_nodes = {"features.7": "feat"}
+        self.extractor = create_feature_extractor(base_model, return_nodes=return_nodes)
 
-# Updated custom encoder that accepts extra arguments (if any)
-class SmallConvNeXtEncoder(nn.Module):
-    def __init__(self, original_encoder):
-        """
-        Construct a slimmed-down encoder.
-        This example reinitializes the downsampling layers and stages with lower widths and fewer blocks.
-        """
-        super().__init__()
-        # Retain preprocessing parts from original encoder
-        self.spectrogram_extractor = original_encoder.spectrogram_extractor
-        self.logmel_extractor = original_encoder.logmel_extractor
-        self.spec_augmenter = original_encoder.spec_augmenter
-        self.speed_perturb = original_encoder.speed_perturb
-        self.bn0 = original_encoder.bn0
+        # 4) Get the channel count by inspecting the classifier’s in_features
+        #    classifier = [Dropout, Linear(in_features=1408, out_features=1000)]
+        self.out_channels = base_model.classifier[1].in_features
 
-        # Build new downsampling layers with smaller output channels
-        self.downsample_layers = nn.ModuleList(
-            [
-                nn.Sequential(
-                    nn.Conv2d(1, 64, kernel_size=(4, 4), stride=(4, 4), padding=(4, 0)),
-                    nn.LayerNorm([64, 1, 1]),  # Adjust shape if needed
-                ),
-                nn.Sequential(
-                    nn.LayerNorm(64),
-                    nn.Conv2d(64, 128, kernel_size=(2, 2), stride=(2, 2)),
-                ),
-                nn.Sequential(
-                    nn.LayerNorm(128),
-                    nn.Conv2d(128, 256, kernel_size=(2, 2), stride=(2, 2)),
-                ),
-                nn.Sequential(
-                    nn.LayerNorm(256),
-                    nn.Conv2d(256, 512, kernel_size=(2, 2), stride=(2, 2)),
-                ),
-            ]
-        )
-
-        # Build stages with our custom small block.
-        # Proposed depths: [2, 2, 6, 2] for the four stages.
-        stage_depths = [2, 2, 6, 2]
-        stage_channels = [64, 128, 256, 512]
-        self.stages = nn.ModuleList()
-        for channels, depth in zip(stage_channels, stage_depths):
-            blocks = []
-            for _ in range(depth):
-                blocks.append(SmallConvNeXtBlock(in_channels=channels))
-            self.stages.append(nn.Sequential(*blocks))
-
-        # Final normalization layer for output features
-        self.norm = nn.LayerNorm(512)  # final channels = 512
+        # 5) LayerNorm over that channel dimension
+        self.norm = nn.LayerNorm(self.out_channels)
 
     def forward(self, *args, **kwargs):
-        """
-        Accept extra positional and keyword arguments so that the call signature
-        matches the original encoder. We'll only use the first positional argument as input.
-        """
-        x = args[0]  # assume the first positional argument is the input tensor
-
-        # Preprocessing
-        x = self.spectrogram_extractor(x)
-        x = self.logmel_extractor(x)
-        x = self.spec_augmenter(x)
-        x = self.speed_perturb(x)
-        x = self.bn0(x)
-
-        # Downsampling layers
-        for layer in self.downsample_layers:
-            x = layer(x)
-
-        # ConvNeXt stages
-        for stage in self.stages:
-            x = stage(x)
-
-        # Flatten spatial dimensions: [B, C, H, W] -> [B, tokens, C]
-        B, C, H, W = x.shape
-        x = x.view(B, C, H * W).transpose(1, 2)
-        x = self.norm(x)
-        return x
+        # Accept extra args/kwargs; use the first positional as input
+        x = args[0]  # [B, 1, H, W] spectrogram
+        feats = self.extractor(x)["feat"]  # [B, C, H', W']
+        B, C, H, W = feats.shape
+        # Flatten spatial dims to a token sequence
+        out = feats.view(B, C, H * W).transpose(1, 2)  # [B, tokens, C]
+        return self.norm(out)
 
 
-# Custom projection layer: maps encoder output (512) to decoder expected dimension (256)
+# Custom projection layer: maps the encoder output dimension (from EfficientNet-B2) to the decoder's embedding size (e.g., 256)
 class CustomProjection(nn.Module):
-    def __init__(self, in_dim=512, out_dim=256):
+    def __init__(self, in_dim, out_dim=256):
         super().__init__()
         self.proj = nn.Linear(in_dim, out_dim)
         self.relu = nn.ReLU()
@@ -187,7 +125,7 @@ class CustomProjection(nn.Module):
         return self.relu(self.proj(x))
 
 
-# Main training function incorporating the student model with the custom smaller encoder
+# Main training function incorporating the student model with EfficientNet-B2 as the encoder
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_path = "./model/baseline/"
@@ -197,24 +135,25 @@ def main():
     teacher_model.to(device).eval()
 
     print("Defining student")
-    # Instantiate student model based on teacher config
+    # Instantiate student model from teacher config.
     student_config = CoNeTTEConfig.from_pretrained(model_path)
     student_model = CoNeTTEModel(student_config)
 
-    # Replace the encoder with our custom smaller encoder
-    student_model.preprocessor.encoder = SmallConvNeXtEncoder(
-        teacher_model.preprocessor.encoder
-    )
+    # Replace the encoder with EfficientNet-B2 encoder.
+    student_model.preprocessor.encoder = EfficientNetB2Encoder()
 
-    # Replace the projection layer to map from 512 (new encoder output) to d_model (256)
+    # Replace the projection layer.
+    # EfficientNet-B2's last feature dimension is stored in student_model.preprocessor.encoder.out_channels.
     student_model.model.projection = nn.Sequential(
-        nn.Dropout(p=0.5),
-        CustomProjection(in_dim=512, out_dim=student_config.d_model),
+        nn.Dropout(0.5),
+        nn.Linear(
+            student_model.preprocessor.encoder.out_channels, student_config.d_model
+        ),
         nn.ReLU(),
-        nn.Dropout(p=0.5),
+        nn.Dropout(0.5),
     )
 
-    # Transfer the tokenizer (ensuring vocabulary alignment)
+    # Transfer the tokenizer for consistent text processing.
     student_model.model.tokenizers["0"] = teacher_model.model.tokenizers["0"]
 
     print("Preparing data")
