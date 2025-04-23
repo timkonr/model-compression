@@ -179,6 +179,7 @@ def main():
 
     # Transfer the tokenizer for consistent text processing.
     student_model.model.tokenizers["0"] = teacher_model.model.tokenizers["0"]
+    student_model = student_model.to(device)
 
     print("Preparing data")
     train_dataset = Clotho("data", subset="dev")
