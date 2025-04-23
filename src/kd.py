@@ -136,7 +136,8 @@ class EfficientNetB2AudioEncoder(nn.Module):
 
         # flatten spatial → tokens
         out = feats.view(B, C, H * W).transpose(1, 2)  # [B, tokens, C]
-        return nn.functional.layer_norm(out, (out.size(-1),), eps=1e-6)
+        out = nn.functional.layer_norm(out, (out.size(-1),), eps=1e-6)
+        return {"frame_embs": out}
 
 
 # Custom projection layer: maps the encoder output dimension (from EfficientNet-B2) to the decoder's embedding size (e.g., 256)
