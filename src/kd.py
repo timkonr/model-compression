@@ -107,9 +107,6 @@ class EfficientNetB2AudioEncoder(nn.Module):
         # 6) read off out_channels from the classifier’s in_features
         self.out_channels = efb2.classifier[1].in_features
 
-        # 7) final LayerNorm over that channel dimension
-        self.norm = nn.LayerNorm(self.out_channels)
-
     def forward(self, *args, **kwargs):
         # CoNeTTE will call encoder(x, x_shapes).
         # We only care about the waveform x = args[0].
@@ -139,7 +136,7 @@ class EfficientNetB2AudioEncoder(nn.Module):
 
         # flatten spatial → tokens
         out = feats.view(B, C, H * W).transpose(1, 2)  # [B, tokens, C]
-        return self.norm(out)
+        return nn.functional.layer_norm(out, (out.size(-1),), eps=1e-6)
 
 
 # Custom projection layer: maps the encoder output dimension (from EfficientNet-B2) to the decoder's embedding size (e.g., 256)
