@@ -127,6 +127,11 @@ class EfficientNetB2AudioEncoder(nn.Module):
         while x.dim() > 4:
             x = x.squeeze(2)
 
+        # resize to 224x224
+        x = nn.functional.interpolate(
+            x, size=(224, 224), mode="bilinear", align_corners=False
+        )
+
         # --- EfficientNet feature extraction ---
         print(">> encoder input shape:", x.shape)
         feats = self.extractor(x)["feat"]  # [B, C=1408, H', W']
