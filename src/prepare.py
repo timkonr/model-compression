@@ -15,9 +15,12 @@ def main():
     # Download dataset
     os.makedirs("data", exist_ok=True)
     if not os.path.isdir("./data/CLOTHO_v2.1"):
-        Clotho("data", subset="eval", download=True)
-        Clotho("data", subset="val", download=True)
-        Clotho("data", subset="dev", download=True)
+        if "eval" in config.download_clotho:
+            Clotho("data", subset="eval", download=True)
+        if "val" in config.download_clotho:
+            Clotho("data", subset="val", download=True)
+        if "dev" in config.download_clotho:
+            Clotho("data", subset="dev", download=True)
     if config.download_audiocaps:
         AudioCaps("data", subset="val", download=True, verify_files=True)
         remove_corrupted_files()
