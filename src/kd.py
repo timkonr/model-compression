@@ -104,8 +104,12 @@ class EfficientNetB2AudioEncoder(nn.Module):
         return_nodes = {"features.7": "feat"}
         self.extractor = create_feature_extractor(efb2, return_nodes=return_nodes)
 
-        # 6) read off out_channels from the classifier’s in_features
-        self.out_channels = efb2.classifier[1].in_features
+        # 6) run a dummy through `self.extractor` at your chosen input size
+        with torch.no_grad():
+            # pick the exact size you resize to in forward, e.g. (224,224)
+            dummy = torch.zeros(1, 1, 224, 224)
+            feat = self.extractor(dummy)["feat"]  # [1, C, H', W']
+            self.out_channels = feat.shape[1]
 
     def forward(self, *args, **kwargs):
         # CoNeTTE will call encoder(x, x_shapes).
