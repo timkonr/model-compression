@@ -135,7 +135,6 @@ class EfficientNetB2AudioEncoder(nn.Module):
         )
 
         # --- EfficientNet feature extraction ---
-        print(">> encoder input shape:", x.shape)
         feats = self.extractor(x)["feat"]  # [B, C=1408, H', W']
         B, C, H, W = feats.shape
 
