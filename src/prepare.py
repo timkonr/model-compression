@@ -13,7 +13,7 @@ def main():
     model.save_pretrained(config.model_folder + "baseline/")
     # Download dataset
     os.makedirs(config.data_folder, exist_ok=True)
-    if not os.path.isdir(config.data_folder + "CLOTHO_v2.1"):
+    if len(config.download_clotho) > 0:
         if "eval" in config.download_clotho:
             Clotho(config.data_folder, subset="eval", download=True)
         if "val" in config.download_clotho:
