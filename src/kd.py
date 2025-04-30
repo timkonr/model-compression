@@ -11,6 +11,7 @@ from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
 from transformers import AutoTokenizer, AutoModel
 from aac_metrics import evaluate
+import config
 
 
 # Mean pooling helper (unchanged)
@@ -163,7 +164,7 @@ class CustomProjection(nn.Module):
 # Main training function incorporating the student model with EfficientNet-B2 as the encoder
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_path = "./model/baseline/"
+    model_path = config.model_folder + "baseline/"
     print("Loading teacher")
     teacher_config = CoNeTTEConfig.from_pretrained(model_path)
     teacher_model = CoNeTTEModel.from_pretrained(model_path, config=teacher_config)
@@ -194,8 +195,8 @@ def main():
     student_model = student_model.to(device)
 
     print("Preparing data")
-    train_dataset = Clotho("data", subset="dev")
-    val_dataset = Clotho("data", subset="val")
+    train_dataset = Clotho(config.data_folder, subset="dev")
+    val_dataset = Clotho(config.data_folder, subset="val")
     train_loader = DataLoader(
         train_dataset,
         batch_size=32,
@@ -246,7 +247,10 @@ def main():
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(student_model.state_dict(), "model/best_student_model.pth")
+            torch.save(
+                student_model.state_dict(),
+                config.model_folder + "best_student_model.pth",
+            )
             print("Saved best student model.")
 
 

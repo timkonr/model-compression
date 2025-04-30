@@ -47,9 +47,9 @@ def prepare_dataloader(verbose):
     print(config.dataset, config.dataset == "clotho")
 
     if config.dataset == "clotho":
-        ds = Clotho("data", subset="eval")
+        ds = Clotho(config.data_folder, subset="eval")
     elif config.dataset == "audiocaps":
-        ds = AudioCaps("data", subset="val")
+        ds = AudioCaps(config.data_folder, subset="val")
     else:
         raise ValueError(f"Unsupported dataset: {config.dataset}")
 

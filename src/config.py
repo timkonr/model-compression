@@ -13,3 +13,5 @@ quantization = False  # Inference on quantized model
 pruning = False  # Inference on pruned model
 kd = False  # Inference on saved kd model
 kd_model = "best_student_model.pth"  # Path to kd model
+data_folder = "data/"  # Path to data folder
+model_folder = "model/"  # Path to model folder

@@ -8,6 +8,7 @@ import torch_pruning as tp
 import torch.fx
 from typing import Any, Iterable, Optional, Union
 from torch import Tensor, Size
+import config
 
 
 class WrappedModel(torch.nn.Module):
@@ -67,7 +68,9 @@ class WrappedModel(torch.nn.Module):
 
 def use_torch_pruning(model: torch.nn.Module):
     loader = DataLoader(
-        Clotho("data", subset="eval"), batch_size=1, collate_fn=BasicCollate()
+        Clotho(config.data_folder, subset="eval"),
+        batch_size=1,
+        collate_fn=BasicCollate(),
     )
     for batch in loader:
         audio = batch["audio"]
@@ -177,8 +180,8 @@ def prune(model, fine_tune=True):
     model = pruner.prune_model()
     if fine_tune:
         print("fine tuning pruned model")
-        train_ds = Clotho("data", subset="dev", download=True)
-        val_ds = Clotho("data", subset="val", download=True)
+        train_ds = Clotho(config.data_folder, subset="dev", download=True)
+        val_ds = Clotho(config.data_folder, subset="val", download=True)
 
         collate = BasicCollate()
         train_loader = DataLoader(train_ds, batch_size=32, collate_fn=collate)
