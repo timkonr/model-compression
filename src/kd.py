@@ -229,12 +229,19 @@ def main():
         for batch in train_loader:
             inputs = batch["audio"].to(device, non_blocking=True)
             with torch.no_grad():
-                teacher_output = teacher_model(inputs)["cands"]
-            student_output = student_model(inputs)["cands"]
+                t_outs = teacher_model.preprocessor.encoder(inputs)
+                t_embs = t_outs["frame_embs"]  # [B, T, C_t]
+                t_embs = t_embs.transpose(1, 2).contiguous()  # [B, C_t, T]
+                t_proj = teacher_model.model.projection(t_embs)  # [B, d_model, T]
 
-            loss = distillation_loss(
-                student_output, teacher_output, tokenizer, transformer, device
-            )
+            # 2) Student forward, get frame embeddings (with grad)
+            s_outs = student_model.preprocessor.encoder(inputs)
+            s_embs = s_outs["frame_embs"].transpose(1, 2).contiguous()  # [B, C_s, T]
+            s_proj = student_model.model.projection(s_embs)  # [B, d_model, T]
+
+            # 3) MSE over these projected features
+            loss = nn.functional.mse_loss(s_proj, t_proj)
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
