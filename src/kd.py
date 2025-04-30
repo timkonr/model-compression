@@ -150,15 +150,22 @@ class EfficientNetB2AudioEncoder(nn.Module):
         return {"frame_embs": out, "frame_embs_lens": frame_embs_lens}
 
 
-# Custom projection layer: maps the encoder output dimension (from EfficientNet-B2) to the decoder's embedding size (e.g., 256)
-class CustomProjection(nn.Module):
-    def __init__(self, in_dim, out_dim=256):
+class Projection(nn.Module):
+    def __init__(self, in_ch, out_ch, p=0.5):
         super().__init__()
-        self.proj = nn.Linear(in_dim, out_dim)
-        self.relu = nn.ReLU()
+        self.dropout1 = nn.Dropout(p)
+        self.lin = nn.Linear(in_ch, out_ch)
+        self.relu = nn.ReLU(inplace=True)
+        self.dropout2 = nn.Dropout(p)
 
     def forward(self, x):
-        return self.relu(self.proj(x))
+        # x: [B, C, T]
+        x = self.dropout1(x)
+        x = x.transpose(1, 2)  # → [B, T, C]
+        x = self.lin(x)  # → [B, T, out_ch]
+        x = self.relu(x)
+        x = x.transpose(1, 2)  # → [B, out_ch, T]
+        return self.dropout2(x)
 
 
 # Main training function incorporating the student model with EfficientNet-B2 as the encoder
@@ -179,16 +186,9 @@ def main():
         original_encoder=teacher_model.preprocessor.encoder
     )
 
-    # Replace the projection layer.
-    # EfficientNet-B2's last feature dimension is stored in student_model.preprocessor.encoder.out_channels.
-    student_model.model.projection = nn.Sequential(
-        nn.Dropout(p=0.5),
-        nn.Linear(
-            student_model.preprocessor.encoder.out_channels, student_config.d_model
-        ),  # e.g. 256
-        nn.ReLU(),
-        nn.Dropout(p=0.5),
-    )
+    enc_ch = student_model.preprocessor.encoder.out_channels
+    dec_ch = student_config.d_model  # e.g. 256
+    student_model.model.projection = Projection(enc_ch, dec_ch, p=0.5)
 
     # Transfer the tokenizer for consistent text processing.
     student_model.model.tokenizers["0"] = teacher_model.model.tokenizers["0"]
