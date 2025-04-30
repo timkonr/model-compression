@@ -200,14 +200,16 @@ def main():
         train_dataset,
         batch_size=32,
         shuffle=True,
-        num_workers=2,
+        num_workers=4,
+        pin_memory=True,
         collate_fn=BasicCollate(),
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=32,
         shuffle=False,
-        num_workers=2,
+        num_workers=4,
+        pin_memory=True,
         collate_fn=BasicCollate(),
     )
 
@@ -225,7 +227,7 @@ def main():
         student_model.train()
         total_loss = 0.0
         for batch in train_loader:
-            inputs = batch["audio"]
+            inputs = batch["audio"].to(device, non_blocking=True)
             with torch.no_grad():
                 teacher_output = teacher_model(inputs)["cands"]
             student_output = student_model(inputs)["cands"]
