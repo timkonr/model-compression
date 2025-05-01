@@ -227,7 +227,7 @@ def main():
         student_model.train()
         total_loss = 0.0
         for batch in train_loader:
-            inputs = batch["audio"].to(device, non_blocking=True)
+            inputs = batch["audio"]
             with torch.no_grad():
                 t_outs = teacher_model.preprocessor.encoder(inputs)
                 t_embs = t_outs["frame_embs"]  # [B, T, C_t]
