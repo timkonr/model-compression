@@ -166,6 +166,8 @@ def validate_student(student, teacher, loader, device):
             audios = batch["audio"]  # list of T_i
             t_proj = extract_proj(teacher, audios, device)
             s_proj = extract_proj(student, audios, device)
+            if t_proj.size(2) != s_proj.size(2):
+                t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
             total_loss += F.mse_loss(s_proj, t_proj).item()
             n += 1
 
@@ -230,6 +232,9 @@ def main():
                 t_proj = extract_proj(teacher_model, audios, device)
 
             s_proj = extract_proj(student_model, audios, device)
+
+            if t_proj.size(2) != s_proj.size(2):
+                t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
             loss = F.mse_loss(s_proj, t_proj)
 
             optimizer.zero_grad()
