@@ -1,8 +1,7 @@
 dataset = "clotho"  # clotho | audiocaps
 download_audiocaps = False  # used only in prepare script
 download_clotho = [
-    "dev",
-    "val",
+    "eval",
 ]  # used only in prepare script. Use dev and val for training, eval for evaluation
 metrics = "all"  # see aac_metrics.functional.evaluate
 inference = True
