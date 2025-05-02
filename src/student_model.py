@@ -179,3 +179,5 @@ def load_student_model():
     # move & eval
     student_model.to(device)
     student_model.eval()
+
+    return student_model
