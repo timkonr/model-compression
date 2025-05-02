@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast, GradScaler
 
 from conette import CoNeTTEModel, CoNeTTEConfig
 from aac_datasets import Clotho
@@ -16,6 +17,8 @@ from torchvision.models.feature_extraction import create_feature_extractor
 from transformers import AutoTokenizer, AutoModel
 import config
 from tqdm.auto import tqdm
+
+torch.backends.cudnn.benchmark = True
 
 
 # ------------------------------------------------------------------
@@ -117,8 +120,7 @@ class EfficientNetB2AudioEncoder(nn.Module):
         while x.dim() > 4:
             x = x.squeeze(2)
 
-        # resize to (224,224)
-        x = F.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
+        x = F.interpolate(x, size=(128, 128), mode="bilinear", align_corners=False)
 
         # EfficientNet features
         feats = self.extractor(x)["feat"]  # [B, C, H', W']
@@ -202,18 +204,20 @@ def main():
     # Data
     train_loader = DataLoader(
         Clotho(config.data_folder, subset="dev"),
-        batch_size=32,
+        batch_size=16,
         shuffle=True,
         num_workers=2,
         pin_memory=True,
+        persistent_workers=True,
         collate_fn=BasicCollate(),
     )
     val_loader = DataLoader(
         Clotho(config.data_folder, subset="val"),
-        batch_size=32,
+        batch_size=16,
         shuffle=False,
         num_workers=2,
         pin_memory=True,
+        persistent_workers=True,
         collate_fn=BasicCollate(),
     )
 
@@ -230,20 +234,23 @@ def main():
         train_bar = tqdm(
             train_loader, desc=f"[Epoch {epoch}/{num_epochs}] Training", leave=False
         )
+        scaler = GradScaler()
         for batch in train_bar:
             audios = batch["audio"]
             with torch.no_grad():
                 t_proj = extract_proj(teacher_model, audios, device)
 
-            s_proj = extract_proj(student_model, audios, device)
-
-            if t_proj.size(2) != s_proj.size(2):
-                t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
-            loss = F.mse_loss(s_proj, t_proj)
-
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            with autocast():
+                s_proj = extract_proj(student_model, audios, device)
+
+                if t_proj.size(2) != s_proj.size(2):
+                    t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
+                loss = F.mse_loss(s_proj, t_proj)
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             total_loss += loss.item()
 
         avg_train = total_loss / len(train_loader)
