@@ -15,6 +15,7 @@ from torchvision.models import efficientnet_b2, EfficientNet_B2_Weights
 from torchvision.models.feature_extraction import create_feature_extractor
 from transformers import AutoTokenizer, AutoModel
 import config
+from tqdm.auto import tqdm
 
 
 # ------------------------------------------------------------------
@@ -160,9 +161,9 @@ def validate_student(student, teacher, loader, device):
     student.eval()
     teacher.eval()
     total_loss, n = 0.0, 0
-
+    val_bar = tqdm(loader, desc=f"Validation", leave=False)
     with torch.no_grad():
-        for batch in loader:
+        for batch in val_bar:
             audios = batch["audio"]  # list of T_i
             t_proj = extract_proj(teacher, audios, device)
             s_proj = extract_proj(student, audios, device)
@@ -170,6 +171,7 @@ def validate_student(student, teacher, loader, device):
                 t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
             total_loss += F.mse_loss(s_proj, t_proj).item()
             n += 1
+            val_bar.set_postfix(val_loss=total_loss / val_bar.n)
 
     return total_loss / n
 
@@ -220,12 +222,16 @@ def main():
 
     print("Starting distillation…")
     best_val = float("inf")
+    num_epochs = 20
 
-    for epoch in range(1, 21):
+    for epoch in range(1, num_epochs + 1):
         student_model.train()
         total_loss = 0.0
 
-        for batch in train_loader:
+        train_bar = tqdm(
+            train_loader, desc=f"[Epoch {epoch}/{num_epochs}] Training", leave=False
+        )
+        for batch in train_bar:
             audios = batch["audio"]
 
             with torch.no_grad():
@@ -241,8 +247,10 @@ def main():
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
+            train_bar.set_postfix(train_loss=total_loss / train_bar.n)
 
         avg_train = total_loss / len(train_loader)
+
         val_loss = validate_student(student_model, teacher_model, val_loader, device)
         print(f"[Epoch {epoch}] train_loss={avg_train:.4f}  val_loss={val_loss:.4f}")
 
