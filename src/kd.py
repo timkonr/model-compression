@@ -20,29 +20,49 @@ import config
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
-def extract_proj(model, audio_list, device):
+def pad_audio(audio_list, device):
     """
-    Pads a list of 1D waveforms, builds x_shapes for ConvNeXt,
-    runs encoder + projection, and returns [B, d_model, T].
+    audio_list: list of 1D or 2D tensors (e.g. [T] or [1, T]).
+    Returns:
+      padded: Tensor of shape [B, T_max] on `device`
+      lengths: list of original lengths
     """
-    # 1) pad & batch the list → Tensor [B, T] on device
-    lengths = [a.size(-1) for a in audio_list]
+    processed = []
+    for a in audio_list:
+        # collapse any singleton channel dimension
+        if a.dim() == 2 and a.size(0) == 1:
+            a = a.squeeze(0)  # [1, T] -> [T]
+        processed.append(a)
+
+    lengths = [a.size(-1) for a in processed]
     max_len = max(lengths)
-    batch = torch.stack(
-        [F.pad(a, (0, max_len - L)) for a, L in zip(audio_list, lengths)], dim=0
-    )
-    inputs = batch.to(device, non_blocking=True)  # [B, T]
 
-    # 2) build a 2-column x_shapes tensor: [ [0, len], [0, len], ... ]
-    #    ConvNeXt only cares about column 1 (the time dim)
+    padded = torch.stack(
+        [F.pad(a, (0, max_len - L)) for a, L in zip(processed, lengths)], dim=0
+    )  # [B, T_max]
+
+    return padded.to(device, non_blocking=True), lengths
+
+
+def extract_proj(model, audio_list, device):
+    # 1) Pad & batch → [B, T] on the correct device + lengths
+    inputs, lengths = pad_audio(audio_list, device)
+
+    # 2) Build x_shapes tensor ([B,2]) so ConvNeXt can index it
     lengths_t = torch.tensor(lengths, dtype=torch.long, device=device)
-    x_shapes = torch.stack([torch.zeros_like(lengths_t), lengths_t], dim=1)  # [B, 2]
+    x_shapes = torch.stack(
+        [
+            torch.zeros_like(lengths_t),  # channel dimension placeholder
+            lengths_t,  # time dimension
+        ],
+        dim=1,
+    )  # shape [B,2]
 
-    # 3) encoder → frame_embs [B, T, C]; transpose → [B, C, T]
+    # 3) Encoder → {"frame_embs": [B,T,C], ...}
     outs = model.preprocessor.encoder(inputs, x_shapes)
-    fe = outs["frame_embs"].transpose(1, 2).contiguous()
+    fe = outs["frame_embs"].transpose(1, 2).contiguous()  # [B,C,T]
 
-    # 4) projection → [B, d_model, T]
+    # 4) Projection → [B,d_model,T]
     return model.model.projection(fe)
 
 
