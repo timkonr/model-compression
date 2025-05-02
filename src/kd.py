@@ -182,7 +182,7 @@ def main():
         Clotho(config.data_folder, subset="dev"),
         batch_size=32,
         shuffle=True,
-        num_workers=4,
+        num_workers=2,
         pin_memory=True,
         collate_fn=BasicCollate(),
     )
@@ -190,7 +190,7 @@ def main():
         Clotho(config.data_folder, subset="val"),
         batch_size=32,
         shuffle=False,
-        num_workers=4,
+        num_workers=2,
         pin_memory=True,
         collate_fn=BasicCollate(),
     )
