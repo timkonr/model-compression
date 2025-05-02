@@ -112,7 +112,7 @@ def perform_inference(verbose, cpu):
     results = []
 
     for model in models_to_eval:
-        if cpu and model["name"] != "kd":
+        if cpu:
             model["model"].to("cpu")
         model_size_mb = get_model_size(model["model"])
         model_params = get_model_params(model["model"])
