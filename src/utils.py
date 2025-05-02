@@ -11,7 +11,8 @@ def load_model(model_path=config.model_folder, quantized=False, pruned=False, kd
         baseline_path, config=CoNeTTEConfig.from_pretrained(baseline_path)
     )
     if kd:
-        model = torch.load(f"{model_path}{config.kd_model}")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = torch.load(f"{model_path}{config.kd_model}", map_location=device)
     if quantized:
         # GPU quantization doesn't work atm, because it is still in alpha or beta for pytorch
         # i.e. it actually would work, but only for a fixed input shape,
