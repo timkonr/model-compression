@@ -22,17 +22,28 @@ import config
 # ------------------------------------------------------------------
 def pad_audio(audio_list, device):
     """
-    audio_list: list of [T_i] waveforms on CPU.
+    audio_list: list of 1D or 2D tensors (e.g. [T] or [1, T])
     Returns:
       padded: Tensor of shape [B, T_max] on `device`
-      lengths: list of ints
+      lengths: list of original lengths
     """
-    lengths = [a.size(-1) for a in audio_list]
+    # 1) squeeze out any singleton channel dim
+    processed = []
+    for a in audio_list:
+        # if shape is [1, T] or [...,1,T], collapse to [T]
+        if a.dim() > 1:
+            a = a.view(-1)
+        processed.append(a)
+
+    # 2) record lengths and pad
+    lengths = [a.size(-1) for a in processed]
     max_len = max(lengths)
     padded = torch.stack(
-        [F.pad(a, (0, max_len - L)) for a, L in zip(audio_list, lengths)], dim=0
+        [F.pad(a, (0, max_len - L)) for a, L in zip(processed, lengths)], dim=0
     )  # [B, T_max]
-    return padded.to(device), lengths
+
+    # 3) move to device once, as a 2-D tensor
+    return padded.to(device, non_blocking=True), lengths
 
 
 def extract_proj(model, inputs, lengths):
