@@ -233,7 +233,7 @@ def main():
         )
         for batch in train_bar:
             audios = batch["audio"]
-
+            print("handling batch")
             with torch.no_grad():
                 t_proj = extract_proj(teacher_model, audios, device)
 
@@ -241,12 +241,14 @@ def main():
 
             if t_proj.size(2) != s_proj.size(2):
                 t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
+            print("calculating loss")
             loss = F.mse_loss(s_proj, t_proj)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
+            print("updating progress bar")
             train_bar.set_postfix(train_loss=total_loss / train_bar.n)
 
         avg_train = total_loss / len(train_loader)
