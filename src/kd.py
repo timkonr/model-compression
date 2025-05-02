@@ -262,7 +262,7 @@ def main():
             best_val = val_loss
             torch.save(
                 student_model.state_dict(),
-                config.model_folder + "best_student_model.pth",
+                config.model_folder + config.kd_model,
             )
             print("  → Saved new best")
 

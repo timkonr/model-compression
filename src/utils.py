@@ -4,7 +4,7 @@ from prune import use_torch_pruning
 import config
 
 
-def load_model(model_path=config.data_folder, quantized=False, pruned=False, kd=False):
+def load_model(model_path=config.model_folder, quantized=False, pruned=False, kd=False):
     print("loading model")
     baseline_path = model_path + "baseline/"
     model = CoNeTTEModel.from_pretrained(
