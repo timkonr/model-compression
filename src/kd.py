@@ -4,89 +4,63 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from conette import CoNeTTEModel, CoNeTTEConfig  # existing imports from your code
+
+from conette import CoNeTTEModel, CoNeTTEConfig
 from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
+from torchvision.models import efficientnet_b2, EfficientNet_B2_Weights
+from torchvision.models.feature_extraction import create_feature_extractor
 from transformers import AutoTokenizer, AutoModel
-from aac_metrics import evaluate
 import config
 
 
-# Mean pooling helper (unchanged)
-def mean_pooling(model_output, attention_mask):
-    token_embeddings = model_output.last_hidden_state
-    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size())
-    return torch.sum(
-        token_embeddings * input_mask_expanded, 1
-    ) / input_mask_expanded.sum(1)
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
+def pad_audio(audio_list, device):
+    """
+    audio_list: list of [T_i] waveforms on CPU.
+    Returns:
+      padded: Tensor of shape [B, T_max] on `device`
+      lengths: list of ints
+    """
+    lengths = [a.size(-1) for a in audio_list]
+    max_len = max(lengths)
+    padded = torch.stack(
+        [F.pad(a, (0, max_len - L)) for a, L in zip(audio_list, lengths)], dim=0
+    )  # [B, T_max]
+    return padded.to(device), lengths
 
 
-# Distillation loss comparing transformer-based sentence embeddings (unchanged)
-def distillation_loss(student_output, teacher_output, tokenizer, transformer, device):
-    student_tokens = tokenizer(
-        student_output, padding=True, truncation=True, return_tensors="pt"
-    ).to(device)
-    teacher_tokens = tokenizer(
-        teacher_output, padding=True, truncation=True, return_tensors="pt"
-    ).to(device)
-
-    student_out = transformer(**student_tokens)
-    teacher_out = transformer(**teacher_tokens)
-
-    student_embed = mean_pooling(student_out, student_tokens["attention_mask"])
-    with torch.no_grad():
-        teacher_embed = mean_pooling(teacher_out, teacher_tokens["attention_mask"])
-
-    loss = nn.functional.mse_loss(student_embed, teacher_embed)
-    return loss
+def extract_proj(model, inputs, lengths):
+    """
+    Runs encoder + projection to get [B, d_model, T] for distillation.
+    """
+    # Encoder expects (wave, lengths)
+    outs = model.preprocessor.encoder(inputs, lengths)
+    # frame_embs: [B, T, C]
+    embs = outs["frame_embs"].transpose(1, 2).contiguous()  # → [B, C, T]
+    return model.model.projection(embs)  # → [B, d_model, T]
 
 
-# Validation uses the teacher model for ground-truth outputs
-def validate_student(
-    student_model, teacher_model, val_loader, tokenizer, transformer, device
-):
-    student_model.eval()
-    teacher_model.eval()
-    total_loss = 0.0
-    count = 0
-
-    with torch.no_grad():
-        for batch in val_loader:
-            inputs = batch["audio"]
-            student_output = student_model(inputs)["cands"]
-            teacher_output = teacher_model(inputs)["cands"]
-            loss = distillation_loss(
-                student_output, teacher_output, tokenizer, transformer, device
-            )
-            total_loss += loss.item()
-            count += 1
-
-    return total_loss / count
-
-
-# Define a custom encoder wrapping EfficientNet-B2
-from torchvision.models import efficientnet_b2, EfficientNet_B2_Weights
-from torchvision.models.feature_extraction import create_feature_extractor
-
-
+# ------------------------------------------------------------------
+# Custom EfficientNet-B2 Encoder
+# ------------------------------------------------------------------
 class EfficientNetB2AudioEncoder(nn.Module):
     def __init__(self, original_encoder):
         super().__init__()
-        # 1) STFT + LogMel from the original ConvNeXt encoder
+        # 1) STFT & LogMel preprocessor
         self.spectrogram_extractor = original_encoder.spectrogram_extractor
         self.logmel_extractor = original_encoder.logmel_extractor
-
-        # 2) (optional) your augmentation steps
         self.spec_augmenter = original_encoder.spec_augmenter
         self.speed_perturb = original_encoder.speed_perturb
 
-        # 3) Load torchvision’s EfficientNet-B2
+        # 2) Load EfficientNet-B2 & swap to 1-channel stem
         weights = EfficientNet_B2_Weights.IMAGENET1K_V1
         efb2 = efficientnet_b2(weights=weights)
-
-        # 4) Swap the stem to accept 1 channel
         stem = efb2.features[0][0]
         if stem.in_channels != 1:
             new_stem = nn.Conv2d(
@@ -97,58 +71,50 @@ class EfficientNetB2AudioEncoder(nn.Module):
                 padding=stem.padding,
                 bias=False,
             )
-            # initialize by averaging the RGB weights
             new_stem.weight.data = stem.weight.data.mean(dim=1, keepdim=True)
             efb2.features[0][0] = new_stem
 
-        # 5) Grab only the final conv features
         return_nodes = {"features.7": "feat"}
         self.extractor = create_feature_extractor(efb2, return_nodes=return_nodes)
 
-        # 6) run a dummy through `self.extractor` at your chosen input size
+        # 3) determine out_channels via dummy pass
         with torch.no_grad():
-            # pick the exact size you resize to in forward, e.g. (224,224)
             dummy = torch.zeros(1, 1, 224, 224)
-            feat = self.extractor(dummy)["feat"]  # [1, C, H', W']
-            self.out_channels = feat.shape[1]
+            self.out_channels = self.extractor(dummy)["feat"].shape[1]
 
-    def forward(self, *args, **kwargs):
-        # CoNeTTE will call encoder(x, x_shapes).
-        # We only care about the waveform x = args[0].
-        wave = args[0]  # [B, T]
-        # --- STFT & LogMel ---
-        x = self.spectrogram_extractor(wave)  # yields [B, 513, time]
-        x = self.logmel_extractor(x)  # yields [B, 224, time]
-
-        # --- make it a 1‑channel “image” ---
-        x = x.unsqueeze(1)  # [B, 1, 224, time]
-
-        # --- optional audio augmentations ---
+    def forward(self, audio, lengths):
+        """
+        audio: [B, T] on GPU
+        lengths: list of original lengths
+        """
+        # STFT → LogMel
+        x = self.spectrogram_extractor(audio)
+        x = self.logmel_extractor(x)  # [B, 224, time]
+        x = x.unsqueeze(1)  # [B,1,224,time]
         x = self.spec_augmenter(x)
         x = self.speed_perturb(x)
         while x.dim() > 4:
             x = x.squeeze(2)
 
-        # resize to 224x224
-        x = nn.functional.interpolate(
-            x, size=(224, 224), mode="bilinear", align_corners=False
-        )
+        # resize to (224,224)
+        x = F.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
 
-        # --- EfficientNet feature extraction ---
-        feats = self.extractor(x)["feat"]  # [B, C=1408, H', W']
+        # EfficientNet features
+        feats = self.extractor(x)["feat"]  # [B, C, H', W']
         B, C, H, W = feats.shape
 
-        # flatten spatial → tokens
-        out = feats.view(B, C, H * W).transpose(1, 2)  # [B, tokens, C]
-        out = nn.functional.layer_norm(out, (out.size(-1),), eps=1e-6)
+        # flatten → [B, T, C]
+        out = feats.view(B, C, H * W).transpose(1, 2)
+        out = F.layer_norm(out, (out.size(-1),), eps=1e-6)
 
-        batch_size, seq_len, _ = out.size()
-        frame_embs_lens = torch.full(
-            (batch_size,), seq_len, dtype=torch.long, device=out.device
-        )
-        return {"frame_embs": out, "frame_embs_lens": frame_embs_lens}
+        # lengths for masking
+        lens = torch.full((B,), out.size(1), dtype=torch.long, device=out.device)
+        return {"frame_embs": out, "frame_embs_lens": lens}
 
 
+# ------------------------------------------------------------------
+# Simple Projection
+# ------------------------------------------------------------------
 class Projection(nn.Module):
     def __init__(self, in_ch, out_ch, p=0.5):
         super().__init__()
@@ -167,37 +133,53 @@ class Projection(nn.Module):
         return self.dropout2(x)
 
 
-# Main training function incorporating the student model with EfficientNet-B2 as the encoder
+# ------------------------------------------------------------------
+# Validation (feature-level distillation)
+# ------------------------------------------------------------------
+def validate_student(student, teacher, loader, device):
+    student.eval()
+    teacher.eval()
+    total_loss, n = 0.0, 0
+
+    with torch.no_grad():
+        for batch in loader:
+            audios = batch["audio"]  # list of T_i
+            inputs, lengths = pad_audio(audios, device)
+            t_proj = extract_proj(teacher, inputs, lengths)
+            s_proj = extract_proj(student, inputs, lengths)
+            total_loss += F.mse_loss(s_proj, t_proj).item()
+            n += 1
+
+    return total_loss / n
+
+
+# ------------------------------------------------------------------
+# Main training
+# ------------------------------------------------------------------
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_path = config.model_folder + "baseline/"
-    print("Loading teacher")
-    teacher_config = CoNeTTEConfig.from_pretrained(model_path)
-    teacher_model = CoNeTTEModel.from_pretrained(model_path, config=teacher_config)
+
+    # Teacher
+    base_path = config.model_folder + "baseline/"
+    teacher_cfg = CoNeTTEConfig.from_pretrained(base_path)
+    teacher_model = CoNeTTEModel.from_pretrained(base_path, config=teacher_cfg)
     teacher_model.to(device).eval()
 
-    print("Defining student")
-    # Instantiate student model from teacher config.
-    student_config = CoNeTTEConfig.from_pretrained(model_path)
-    student_model = CoNeTTEModel(student_config)
-
+    # Student
+    student_cfg = CoNeTTEConfig.from_pretrained(base_path)
+    student_model = CoNeTTEModel(student_cfg)
     student_model.preprocessor.encoder = EfficientNetB2AudioEncoder(
-        original_encoder=teacher_model.preprocessor.encoder
+        teacher_model.preprocessor.encoder
     )
-
     enc_ch = student_model.preprocessor.encoder.out_channels
-    dec_ch = student_config.d_model  # e.g. 256
+    dec_ch = student_cfg.d_model
     student_model.model.projection = Projection(enc_ch, dec_ch, p=0.5)
-
-    # Transfer the tokenizer for consistent text processing.
     student_model.model.tokenizers["0"] = teacher_model.model.tokenizers["0"]
-    student_model = student_model.to(device)
+    student_model.to(device)
 
-    print("Preparing data")
-    train_dataset = Clotho(config.data_folder, subset="dev")
-    val_dataset = Clotho(config.data_folder, subset="val")
+    # Data
     train_loader = DataLoader(
-        train_dataset,
+        Clotho(config.data_folder, subset="dev"),
         batch_size=32,
         shuffle=True,
         num_workers=4,
@@ -205,7 +187,7 @@ def main():
         collate_fn=BasicCollate(),
     )
     val_loader = DataLoader(
-        val_dataset,
+        Clotho(config.data_folder, subset="val"),
         batch_size=32,
         shuffle=False,
         num_workers=4,
@@ -214,52 +196,40 @@ def main():
     )
 
     optimizer = optim.AdamW(student_model.parameters(), lr=1e-4)
-    tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
-    transformer = AutoModel.from_pretrained(
-        "sentence-transformers/all-MiniLM-L6-v2"
-    ).to(device)
 
-    print("Starting knowledge distillation training")
-    best_val_loss = float("inf")
-    num_epochs = 20
+    print("Starting distillation…")
+    best_val = float("inf")
 
-    for epoch in range(num_epochs):
+    for epoch in range(1, 21):
         student_model.train()
         total_loss = 0.0
+
         for batch in train_loader:
-            inputs = batch["audio"]
+            audios = batch["audio"]
+            inputs, lengths = pad_audio(audios, device)
+
             with torch.no_grad():
-                t_outs = teacher_model.preprocessor.encoder(inputs)
-                t_embs = t_outs["frame_embs"]  # [B, T, C_t]
-                t_embs = t_embs.transpose(1, 2).contiguous()  # [B, C_t, T]
-                t_proj = teacher_model.model.projection(t_embs)  # [B, d_model, T]
+                t_proj = extract_proj(teacher_model, inputs, lengths)
 
-            # 2) Student forward, get frame embeddings (with grad)
-            s_outs = student_model.preprocessor.encoder(inputs)
-            s_embs = s_outs["frame_embs"].transpose(1, 2).contiguous()  # [B, C_s, T]
-            s_proj = student_model.model.projection(s_embs)  # [B, d_model, T]
-
-            # 3) MSE over these projected features
-            loss = nn.functional.mse_loss(s_proj, t_proj)
+            s_proj = extract_proj(student_model, inputs, lengths)
+            loss = F.mse_loss(s_proj, t_proj)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
-        avg_train_loss = total_loss / len(train_loader)
-        print(f"[Epoch {epoch+1}] Training Loss: {avg_train_loss:.4f}")
-        val_loss = validate_student(
-            student_model, teacher_model, val_loader, tokenizer, transformer, device
-        )
-        print(f"[Epoch {epoch+1}] Validation Loss: {val_loss:.4f}")
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        avg_train = total_loss / len(train_loader)
+        val_loss = validate_student(student_model, teacher_model, val_loader, device)
+        print(f"[Epoch {epoch}] train_loss={avg_train:.4f}  val_loss={val_loss:.4f}")
+
+        if val_loss < best_val:
+            best_val = val_loss
             torch.save(
                 student_model.state_dict(),
                 config.model_folder + "best_student_model.pth",
             )
-            print("Saved best student model.")
+            print("  → Saved new best")
 
 
 if __name__ == "__main__":
