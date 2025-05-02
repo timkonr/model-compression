@@ -20,41 +20,30 @@ import config
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
-def pad_audio(audio_list, device):
+def extract_proj(model, audio_list, device):
     """
-    audio_list: list of 1D or 2D tensors (e.g. [T] or [1, T])
-    Returns:
-      padded: Tensor of shape [B, T_max] on `device`
-      lengths: list of original lengths
+    Pads a list of 1D waveforms, builds x_shapes for ConvNeXt,
+    runs encoder + projection, and returns [B, d_model, T].
     """
-    # 1) squeeze out any singleton channel dim
-    processed = []
-    for a in audio_list:
-        # if shape is [1, T] or [...,1,T], collapse to [T]
-        if a.dim() > 1:
-            a = a.view(-1)
-        processed.append(a)
-
-    # 2) record lengths and pad
-    lengths = [a.size(-1) for a in processed]
+    # 1) pad & batch the list → Tensor [B, T] on device
+    lengths = [a.size(-1) for a in audio_list]
     max_len = max(lengths)
-    padded = torch.stack(
-        [F.pad(a, (0, max_len - L)) for a, L in zip(processed, lengths)], dim=0
-    )  # [B, T_max]
+    batch = torch.stack(
+        [F.pad(a, (0, max_len - L)) for a, L in zip(audio_list, lengths)], dim=0
+    )
+    inputs = batch.to(device, non_blocking=True)  # [B, T]
 
-    # 3) move to device once, as a 2-D tensor
-    return padded.to(device, non_blocking=True), lengths
+    # 2) build a 2-column x_shapes tensor: [ [0, len], [0, len], ... ]
+    #    ConvNeXt only cares about column 1 (the time dim)
+    lengths_t = torch.tensor(lengths, dtype=torch.long, device=device)
+    x_shapes = torch.stack([torch.zeros_like(lengths_t), lengths_t], dim=1)  # [B, 2]
 
+    # 3) encoder → frame_embs [B, T, C]; transpose → [B, C, T]
+    outs = model.preprocessor.encoder(inputs, x_shapes)
+    fe = outs["frame_embs"].transpose(1, 2).contiguous()
 
-def extract_proj(model, inputs, lengths):
-    """
-    Runs encoder + projection to get [B, d_model, T] for distillation.
-    """
-    # Encoder expects (wave, lengths)
-    outs = model.preprocessor.encoder(inputs, lengths)
-    # frame_embs: [B, T, C]
-    embs = outs["frame_embs"].transpose(1, 2).contiguous()  # → [B, C, T]
-    return model.model.projection(embs)  # → [B, d_model, T]
+    # 4) projection → [B, d_model, T]
+    return model.model.projection(fe)
 
 
 # ------------------------------------------------------------------
@@ -155,9 +144,8 @@ def validate_student(student, teacher, loader, device):
     with torch.no_grad():
         for batch in loader:
             audios = batch["audio"]  # list of T_i
-            inputs, lengths = pad_audio(audios, device)
-            t_proj = extract_proj(teacher, inputs, lengths)
-            s_proj = extract_proj(student, inputs, lengths)
+            t_proj = extract_proj(teacher, audios, device)
+            s_proj = extract_proj(student, audios, device)
             total_loss += F.mse_loss(s_proj, t_proj).item()
             n += 1
 
@@ -217,12 +205,11 @@ def main():
 
         for batch in train_loader:
             audios = batch["audio"]
-            inputs, lengths = pad_audio(audios, device)
 
             with torch.no_grad():
-                t_proj = extract_proj(teacher_model, inputs, lengths)
+                t_proj = extract_proj(teacher_model, audios, device)
 
-            s_proj = extract_proj(student_model, inputs, lengths)
+            s_proj = extract_proj(student_model, audios, device)
             loss = F.mse_loss(s_proj, t_proj)
 
             optimizer.zero_grad()
