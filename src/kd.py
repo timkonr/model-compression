@@ -3,7 +3,6 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -12,9 +11,6 @@ from torch.cuda.amp import autocast, GradScaler
 from conette import CoNeTTEModel, CoNeTTEConfig
 from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
-from torchvision.models import efficientnet_b2, EfficientNet_B2_Weights
-from torchvision.models.feature_extraction import create_feature_extractor
-from transformers import AutoTokenizer, AutoModel
 from tqdm.auto import tqdm
 
 import config
