@@ -6,7 +6,6 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.cuda.amp import autocast, GradScaler
 
 from conette import CoNeTTEModel, CoNeTTEConfig
 from aac_datasets import Clotho
@@ -97,23 +96,20 @@ def main():
         train_bar = tqdm(
             train_loader, desc=f"[Epoch {epoch}/{num_epochs}] Training", leave=False
         )
-        scaler = GradScaler()
         for batch in train_bar:
             audios = batch["audio"]
             with torch.no_grad():
                 t_proj = extract_proj(teacher_model, audios, device)
 
             optimizer.zero_grad()
-            with autocast():
-                s_proj = extract_proj(student_model, audios, device)
+            s_proj = extract_proj(student_model, audios, device)
 
-                if t_proj.size(2) != s_proj.size(2):
-                    t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
-                loss = F.mse_loss(s_proj, t_proj)
+            if t_proj.size(2) != s_proj.size(2):
+                t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
+            loss = F.mse_loss(s_proj, t_proj)
 
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            loss.backward()
+            optimizer.step()
             total_loss += loss.item()
 
         avg_train = total_loss / len(train_loader)
