@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from transformers import get_linear_schedule_with_warmup
 
 from conette import CoNeTTEModel, CoNeTTEConfig
 from aac_datasets import Clotho
@@ -84,11 +85,15 @@ def main():
     )
 
     optimizer = optim.AdamW(student_model.parameters(), lr=1e-4)
-
-    print("Starting distillation…")
     best_val = float("inf")
     num_epochs = 20
+    total_steps = len(train_loader) * num_epochs
+    warmup_steps = int(0.05 * total_steps)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps
+    )
 
+    print("Starting distillation…")
     for epoch in range(1, num_epochs + 1):
         student_model.train()
         total_loss = 0.0
@@ -111,6 +116,7 @@ def main():
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
+            scheduler.step()
 
         avg_train = total_loss / len(train_loader)
 
