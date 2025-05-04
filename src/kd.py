@@ -36,6 +36,31 @@ def validate_student(student, teacher, loader, device):
     return total_loss / n
 
 
+def contrastive_loss(s_proj, t_proj):
+    # 1) MSE loss (as before)
+    mse_loss = F.mse_loss(s_proj, t_proj)
+
+    # 2) Utterance‐level pooling & normalization
+    #   from [B, d_model, T] → [B, d_model]
+    t_utt = t_proj.mean(dim=2)  # teacher utterance embeds
+    s_utt = s_proj.mean(dim=2)  # student utterance embeds
+    t_norm = F.normalize(t_utt, p=2, dim=1)  # [B, d_model]
+    s_norm = F.normalize(s_utt, p=2, dim=1)
+
+    # 3) InfoNCE logits & labels
+    tau = 0.07
+    logits = torch.matmul(s_norm, t_norm.t()) / tau  # [B, B]
+    labels = torch.arange(logits.size(0), device=logits.device)
+
+    contrastive_loss = F.cross_entropy(logits, labels)
+
+    # 4) Combined loss
+    alpha = 0.5  # weight between MSE and contrastive; tune as needed
+    loss = alpha * mse_loss + (1 - alpha) * contrastive_loss
+
+    return loss
+
+
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -110,7 +135,8 @@ def main():
             if t_proj.size(2) != s_proj.size(2):
                 t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
 
-            loss = F.mse_loss(s_proj, t_proj)
+            loss = contrastive_loss(s_proj, t_proj)
+
             loss.backward()
             optimizer.step()
             scheduler.step()
