@@ -85,7 +85,7 @@ def main():
     # Data loaders
     train_loader = DataLoader(
         Clotho(config.data_folder, subset="dev"),
-        batch_size=32,
+        batch_size=config.batch_size,
         shuffle=True,
         num_workers=2,
         pin_memory=True,
@@ -94,7 +94,7 @@ def main():
     )
     val_loader = DataLoader(
         Clotho(config.data_folder, subset="val"),
-        batch_size=32,
+        batch_size=config.batch_size,
         shuffle=False,
         num_workers=2,
         pin_memory=True,
@@ -104,8 +104,7 @@ def main():
 
     # Optimizer + LR schedule
     optimizer = optim.AdamW(student_model.parameters(), lr=1e-4)
-    num_epochs = 20
-    total_steps = len(train_loader) * num_epochs
+    total_steps = len(train_loader) * config.num_epochs
     warmup_steps = int(0.05 * total_steps)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps
@@ -117,11 +116,13 @@ def main():
     best_epoch = 0
     no_improve = 0
 
-    for epoch in range(1, num_epochs + 1):
+    for epoch in range(1, config.num_epochs + 1):
         student_model.train()
         total_loss = 0.0
         train_bar = tqdm(
-            train_loader, desc=f"[Epoch {epoch}/{num_epochs}] Training", leave=False
+            train_loader,
+            desc=f"[Epoch {epoch}/{config.num_epochs}] Training",
+            leave=False,
         )
 
         for batch in train_bar:

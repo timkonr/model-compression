@@ -16,3 +16,5 @@ data_folder = "data/"  # Path to data folder
 model_folder = "model/"  # Path to model folder
 
 patience = 5
+num_epochs = 25
+batch_size = 32
