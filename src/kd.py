@@ -85,7 +85,7 @@ def main():
     # Data loaders
     train_loader = DataLoader(
         Clotho(config.data_folder, subset="dev"),
-        batch_size=16,
+        batch_size=32,
         shuffle=True,
         num_workers=2,
         pin_memory=True,
@@ -94,7 +94,7 @@ def main():
     )
     val_loader = DataLoader(
         Clotho(config.data_folder, subset="val"),
-        batch_size=16,
+        batch_size=32,
         shuffle=False,
         num_workers=2,
         pin_memory=True,
