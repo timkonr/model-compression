@@ -66,6 +66,53 @@ def contrastive_loss(s_proj, t_proj, alpha=0.5):
     return loss
 
 
+def ce_loss(student_model, audios, T_out, device):
+    # ------------------------------------------------------------------
+    # 0) constants
+    pad_id = student_model.model.tokenizers["0"].pad_token_id
+
+    # ------------------------------------------------------------------
+    # inside your batch loop *after* you already have teacher_ids
+    teacher_ids = T_out["preds"].to(device)  # [B, L]
+
+    # 1) pad audio once
+    wave, lengths = pad_audio(audios, device)  # wave: [B, T]
+    x_shapes = torch.stack(
+        [
+            torch.zeros_like(torch.tensor(lengths, device=device)),
+            torch.tensor(lengths, device=device),
+        ],
+        dim=1,
+    )
+
+    # 2) encoder *with* projection (so channels == d_model)
+    #    -> use the Lightning helper to avoid shape bugs
+    mem = student_model.model.encode_audio(wave, x_shapes)  # [B, T_enc, d_model]
+
+    # 3) shift teacher_ids for decoder input/output
+    dec_in = teacher_ids[:, :-1]  # [B, L-1] <bos> w1 … w_{L-1}
+    dec_tgt = teacher_ids[:, 1:]  # [B, L-1] w1 … w_{L-1} <eos>
+
+    # 4) embed + positional encode
+    dec_x = student_model.model.decoder.emb_layer(dec_in)  # [B, L-1, d_model]
+    dec_x = student_model.model.decoder.pos_encoding(dec_x)
+    dec_x = dec_x.transpose(0, 1)  # [L-1, B, d_model]
+
+    # 5) run through each decoder layer (standard PyTorch 2 loop)
+    memory = mem.transpose(0, 1).contiguous()  # [T_enc, B, d_model]
+    for layer in student_model.model.decoder.layers:
+        dec_x, _ = layer(dec_x, memory)
+
+    # 6) project to vocab, compute CE
+    logits = student_model.model.decoder.classifier(dec_x.transpose(0, 1))
+    B, Lm1, V = logits.size()
+    loss_ce = F.cross_entropy(
+        logits.reshape(B * Lm1, V), dec_tgt.reshape(B * Lm1), ignore_index=pad_id
+    )
+
+    return loss_ce
+
+
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -122,12 +169,14 @@ def main():
     no_improve = 0
     lambda_feat = 1.0  # contrastive loss weight
     lambda_seq = 0.03  # sequence level KD weight
+    lambda_ce = 1.0  # cross entropy loss weight
 
     for epoch in range(1, config.num_epochs + 1):
         student_model.train()
         total_loss = 0.0
         total_feat = 0.0
         total_seq = 0.0
+        total_ce = 0.0
         train_bar = tqdm(
             train_loader,
             desc=f"[Epoch {epoch}/{config.num_epochs}] Training",
@@ -147,13 +196,15 @@ def main():
             # MSE on log‐probs is a simple sequence‐level KD
             loss_seq = F.mse_loss(s_lprobs, t_lprobs)
 
+            loss_ce = ce_loss(student_model, audios, T_out, device)
+
             # plus your feature‐KD
             s_proj = extract_proj(student_model, audios, device)
             if t_proj.size(2) != s_proj.size(2):
                 t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
             loss_feat = contrastive_loss(s_proj, t_proj)
 
-            loss = lambda_feat * loss_feat + lambda_seq * loss_seq
+            loss = lambda_feat * loss_feat + lambda_seq * loss_seq + lambda_ce * loss_ce
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -162,12 +213,14 @@ def main():
             total_loss += loss.item()
             total_feat += loss_feat.item()
             total_seq += loss_seq.item()
+            total_ce += loss_ce.item()
         avg_train = total_loss / len(train_loader)
         avg_feat = total_feat / len(train_loader)
         avg_seq = total_seq / len(train_loader)
+        avg_ce = total_ce / len(train_loader)
         val_loss = validate_student(student_model, teacher_model, val_loader, device)
         print(
-            f"[Epoch {epoch}] train_loss=(feat={avg_feat:.4f}, seq={avg_seq:.4f}, total={avg_train:.4f})  val_loss={val_loss:.4f}"
+            f"[Epoch {epoch}] train_loss=(feat={avg_feat:.4f}, seq={avg_seq:.4f}, ce={avg_ce:.4f}, total={avg_train:.4f})  val_loss={val_loss:.4f}"
         )
 
         # Evaluate student model on bleu, fense and spider-fl every 5 epochs
