@@ -125,6 +125,8 @@ def main():
     for epoch in range(1, config.num_epochs + 1):
         student_model.train()
         total_loss = 0.0
+        total_feat = 0.0
+        total_seq = 0.0
         train_bar = tqdm(
             train_loader,
             desc=f"[Epoch {epoch}/{config.num_epochs}] Training",
@@ -157,16 +159,15 @@ def main():
             scheduler.step()
 
             total_loss += loss.item()
-            train_bar.set_postfix(
-                {
-                    "feat": f"{loss_feat.item():.3f}",
-                    "seq": f"{loss_seq.item():.3f}",
-                    "comb": f"{loss.item():.3f}",
-                }
-            )
+            total_feat += loss_feat.item()
+            total_seq += loss_seq.item()
         avg_train = total_loss / len(train_loader)
+        avg_feat = total_feat / len(train_loader)
+        avg_seq = total_seq / len(train_loader)
         val_loss = validate_student(student_model, teacher_model, val_loader, device)
-        print(f"[Epoch {epoch}] train_loss={avg_train:.4f}  val_loss={val_loss:.4f}")
+        print(
+            f"[Epoch {epoch}] train_loss=(feat={avg_feat:.4f}, seq={avg_seq:.4f}, total={avg_train:.4f})  val_loss={val_loss:.4f}"
+        )
 
         # early stopping logic
         if val_loss < best_val:
