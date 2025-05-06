@@ -134,37 +134,18 @@ def main():
         for batch in train_bar:
             audios = batch["audio"]
             with torch.no_grad():
-                T_out = teacher_model(audios)
-                teacher_ids = T_out["preds"].to(device)  # [B, L]
                 t_proj = extract_proj(teacher_model, audios, device)
 
-            # 2) Student feature proj (contrastive)
             s_proj = extract_proj(student_model, audios, device)
             if t_proj.size(2) != s_proj.size(2):
                 t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
             loss_feat = contrastive_loss(s_proj, t_proj)
 
-            inputs, lengths = pad_audio(audios, device)  # [B, T]
-            lengths_t = torch.tensor(lengths, device=device)
-            x_shapes = torch.stack([torch.zeros_like(lengths_t), lengths_t], dim=1)
-            enc_outs = student_model.preprocessor.encoder(inputs, x_shapes)
-
-            # transpose to [B, C, T] for the Lightning module
-            frame_embs = enc_outs["frame_embs"].transpose(1, 2)
-            frame_lens = enc_outs["frame_embs_lens"]
-
-            batch_dict = {
-                "frame_embs": frame_embs,
-                "frame_embs_lens": frame_lens,
-                "audio_shape": x_shapes,
-                "audio": inputs,
-                "captions": teacher_ids,
-            }
-            S_out = student_model.model(batch_dict)
+            optimizer.zero_grad()
+            S_out = student_model(audios)
             loss_ce = S_out["loss"]
 
             loss = lambda_feat * loss_feat + lambda_ce * loss_ce
-            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             scheduler.step()
