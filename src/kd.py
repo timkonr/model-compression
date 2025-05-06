@@ -120,7 +120,7 @@ def main():
     best_epoch = 0
     no_improve = 0
     lambda_feat = 1.0  # contrastive loss weight
-    lambda_seq = 0.1  # sequence level KD weight
+    lambda_seq = 0.03  # sequence level KD weight
 
     for epoch in range(1, config.num_epochs + 1):
         student_model.train()
