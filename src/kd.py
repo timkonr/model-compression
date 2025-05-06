@@ -157,6 +157,7 @@ def main():
                 "frame_embs": frame_embs,
                 "frame_embs_lens": frame_lens,
                 "audio_shape": x_shapes,
+                "audio": inputs,
                 "captions": teacher_ids,
             }
             S_out = student_model.model(batch_dict)
