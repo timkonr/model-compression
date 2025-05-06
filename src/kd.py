@@ -134,6 +134,8 @@ def main():
         for batch in train_bar:
             audios = batch["audio"]
             with torch.no_grad():
+                T_out = teacher_model(audios)
+                teacher_ids = T_out["preds"].to(device)  # [B, L]
                 t_proj = extract_proj(teacher_model, audios, device)
 
             s_proj = extract_proj(student_model, audios, device)
@@ -141,17 +143,45 @@ def main():
                 t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
             loss_feat = contrastive_loss(s_proj, t_proj)
 
-            optimizer.zero_grad()
-            S_out = student_model(audios)
-            loss_ce = S_out["loss"]
+            inputs, lengths = pad_audio(audios, device)  # [B, T]
+            lengths_t = torch.tensor(lengths, device=device)
+            x_shapes = torch.stack([torch.zeros_like(lengths_t), lengths_t], dim=1)
+            enc_outs = student_model.preprocessor.encoder(inputs, x_shapes)
+            # enc_outs["frame_embs"]: [B, T_enc, C]
+
+            #    – shift teacher_ids for decoder input/output
+            decoder_input_ids = teacher_ids[:, :-1]  # [B, L-1]
+            decoder_labels = teacher_ids[:, 1:]  # [B, L-1]
+            pad_id = student_model.model.tokenizers["0"].pad_token_id
+
+            emb = student_model.model.decoder.emb_layer(
+                decoder_input_ids
+            )  # [B, L-1, C]
+            emb = student_model.model.decoder.pos_encoding(emb)  # same shape
+
+            memory = enc_outs["frame_embs"].transpose(0, 1).contiguous()
+
+            x = emb.transpose(0, 1)  # [L-1, B, C]
+            for layer in student_model.model.decoder.layers:
+                x, _ = layer(x, memory)  # x: [L-1, B, C]
+
+            x = x.transpose(0, 1)  # [B, L-1, C]
+            logits = student_model.model.decoder.classifier(x)  # [B, L-1, Vocab]
+
+            B, Lm1, V = logits.size()
+            loss_ce = F.cross_entropy(
+                logits.view(B * Lm1, V),
+                decoder_labels.view(B * Lm1),
+                ignore_index=pad_id,
+            )
 
             loss = lambda_feat * loss_feat + lambda_ce * loss_ce
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             scheduler.step()
 
             total_loss += loss.item()
-
         avg_train = total_loss / len(train_loader)
         val_loss = validate_student(student_model, teacher_model, val_loader, device)
         print(f"[Epoch {epoch}] train_loss={avg_train:.4f}  val_loss={val_loss:.4f}")
