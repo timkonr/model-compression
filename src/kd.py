@@ -12,6 +12,7 @@ from tqdm.auto import tqdm
 from conette import CoNeTTEModel, CoNeTTEConfig
 from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
+from aac_metrics import evaluate
 
 import config
 from student_model import (
@@ -168,6 +169,24 @@ def main():
         print(
             f"[Epoch {epoch}] train_loss=(feat={avg_feat:.4f}, seq={avg_seq:.4f}, total={avg_train:.4f})  val_loss={val_loss:.4f}"
         )
+
+        # Evaluate student model on bleu, fense and spider-fl every 5 epochs
+        if epoch % 5 == 0:
+            student_model.eval()
+            candidates = []
+            mult_references = []
+            for batch in val_loader:
+                audios = batch["audio"]
+                with torch.no_grad():
+                    outputs = student_model(audios, task="clotho")
+                    candidates.append(outputs["cands"])
+                    mult_references.append(batch["captions"])
+
+            evaluate(
+                candidates=candidates,
+                mult_references=mult_references,
+                metrics=list("bleu_1", "fense", "spider-fl"),
+            )
 
         # early stopping logic
         if val_loss < best_val:
