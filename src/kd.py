@@ -14,7 +14,12 @@ from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
 
 import config
-from student_model import extract_proj, EfficientNetB2AudioEncoder, Projection
+from student_model import (
+    extract_proj,
+    EfficientNetB2AudioEncoder,
+    Projection,
+    pad_audio,
+)
 
 torch.backends.cudnn.benchmark = True
 
@@ -36,7 +41,7 @@ def validate_student(student, teacher, loader, device):
     return total_loss / n
 
 
-def contrastive_loss(s_proj, t_proj):
+def contrastive_loss(s_proj, t_proj, alpha=0.5):
     # 1) MSE loss (as before)
     mse_loss = F.mse_loss(s_proj, t_proj)
 
@@ -55,7 +60,6 @@ def contrastive_loss(s_proj, t_proj):
     contrastive_loss = F.cross_entropy(logits, labels)
 
     # 4) Combined loss
-    alpha = 0.5  # weight between MSE and contrastive; tune as needed
     loss = alpha * mse_loss + (1 - alpha) * contrastive_loss
 
     return loss
@@ -115,6 +119,8 @@ def main():
     best_val = float("inf")
     best_epoch = 0
     no_improve = 0
+    lambda_feat = 1.0  # contrastive loss weight
+    lambda_ce = 1.0  # CE weight
 
     for epoch in range(1, config.num_epochs + 1):
         student_model.train()
@@ -128,16 +134,31 @@ def main():
         for batch in train_bar:
             audios = batch["audio"]
             with torch.no_grad():
+                T_out = teacher_model(audios)  # does preprocessor+encoder+decoder
+                teacher_ids = T_out["preds"].to(device)  # [B,L]
+                # extract teacher projections in one shot
                 t_proj = extract_proj(teacher_model, audios, device)
 
-            optimizer.zero_grad()
-            s_proj = extract_proj(student_model, audios, device)
+            inputs, lengths = pad_audio(audios, device)  # [B,T], CPU→GPU
+            lengths_t = torch.tensor(lengths, device=device)
+            x_shapes = torch.stack([torch.zeros_like(lengths_t), lengths_t], dim=1)
+
+            enc_outs = student_model.preprocessor.encoder(inputs, x_shapes)
+            s_proj = student_model.model.projection(
+                enc_outs["frame_embs"].transpose(1, 2).contiguous()
+            )  # [B, d_model, T]
 
             if t_proj.size(2) != s_proj.size(2):
                 t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
 
-            loss = contrastive_loss(s_proj, t_proj)
+            loss_feat = contrastive_loss(s_proj, t_proj)
 
+            # use the high‐level API: feeds through the decoder under teacher_ids
+            S_out = student_model(audios, captions=teacher_ids)
+            loss_ce = S_out["loss"]
+
+            loss = lambda_feat * loss_feat + lambda_ce * loss_ce
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             scheduler.step()
