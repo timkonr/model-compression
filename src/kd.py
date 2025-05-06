@@ -120,7 +120,7 @@ def main():
     best_epoch = 0
     no_improve = 0
     lambda_feat = 1.0  # contrastive loss weight
-    lambda_seq = 1.0  # sequence level KD weight
+    lambda_seq = 0.1  # sequence level KD weight
 
     for epoch in range(1, config.num_epochs + 1):
         student_model.train()
@@ -157,6 +157,13 @@ def main():
             scheduler.step()
 
             total_loss += loss.item()
+            train_bar.set_postfix(
+                {
+                    "feat": f"{loss_feat.item():.3f}",
+                    "seq": f"{loss_seq.item():.3f}",
+                    "comb": f"{loss.item():.3f}",
+                }
+            )
         avg_train = total_loss / len(train_loader)
         val_loss = validate_student(student_model, teacher_model, val_loader, device)
         print(f"[Epoch {epoch}] train_loss={avg_train:.4f}  val_loss={val_loss:.4f}")
