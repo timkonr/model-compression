@@ -134,31 +134,30 @@ def main():
         for batch in train_bar:
             audios = batch["audio"]
             with torch.no_grad():
-                T_out = teacher_model(audios)  # does preprocessor+encoder+decoder
-                teacher_ids = T_out["preds"].to(device)  # [B,L]
-                # extract teacher projections in one shot
+                T_out = teacher_model(audios)
+                teacher_ids = T_out["preds"].to(device)  # [B, L]
                 t_proj = extract_proj(teacher_model, audios, device)
 
-            inputs, lengths = pad_audio(audios, device)  # [B,T], CPU→GPU
-            lengths_t = torch.tensor(lengths, device=device)
-            x_shapes = torch.stack([torch.zeros_like(lengths_t), lengths_t], dim=1)
-
-            enc_outs = student_model.preprocessor.encoder(inputs, x_shapes)
-            s_proj = student_model.model.projection(
-                enc_outs["frame_embs"].transpose(1, 2).contiguous()
-            )  # [B, d_model, T]
-
+            # 2) Student feature proj (contrastive)
+            s_proj = extract_proj(student_model, audios, device)
             if t_proj.size(2) != s_proj.size(2):
                 t_proj = F.adaptive_avg_pool1d(t_proj, s_proj.size(2))
-
             loss_feat = contrastive_loss(s_proj, t_proj)
 
+            inputs, lengths = pad_audio(audios, device)  # [B, T]
+            lengths_t = torch.tensor(lengths, device=device)
+            x_shapes = torch.stack([torch.zeros_like(lengths_t), lengths_t], dim=1)
+            enc_outs = student_model.preprocessor.encoder(inputs, x_shapes)
+
+            # transpose to [B, C, T] for the Lightning module
+            frame_embs = enc_outs["frame_embs"].transpose(1, 2)
+            frame_lens = enc_outs["frame_embs_lens"]
+
             batch_dict = {
-                "frame_embs": enc_outs["frame_embs"].transpose(1, 2),
-                "frame_embs_lens": enc_outs["frame_embs_lens"],
-                "captions": teacher_ids,
-                "audio": inputs,
+                "frame_embs": frame_embs,
+                "frame_embs_lens": frame_lens,
                 "audio_shape": x_shapes,
+                "captions": teacher_ids,
             }
             S_out = student_model.model(batch_dict)
             loss_ce = S_out["loss"]
@@ -173,7 +172,6 @@ def main():
 
         avg_train = total_loss / len(train_loader)
         val_loss = validate_student(student_model, teacher_model, val_loader, device)
-
         print(f"[Epoch {epoch}] train_loss={avg_train:.4f}  val_loss={val_loss:.4f}")
 
         # early stopping logic
