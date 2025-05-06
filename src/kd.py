@@ -66,18 +66,24 @@ def contrastive_loss(s_proj, t_proj, alpha=0.5):
     return loss
 
 
-def ce_loss(student_model, audios, T_out, device):
-    # ------------------------------------------------------------------
-    # 0) constants
-    pad_id = student_model.model.tokenizers["0"].pad_token_id
+def ce_loss(student_model, teacher_model, batch, device):
+    tok = teacher_model.model.tokenizers["0"]
+    pad_id = tok.pad_token_id
+    bos_id = tok.bos_token_id
+    eos_id = tok.eos_token_id
 
-    # ------------------------------------------------------------------
-    # inside your batch loop *after* you already have teacher_ids
-    teacher_ids = T_out["preds"].to(device)  # [B, L]
+    # prepend <bos>, append <eos>
+    caps_bos_eos = [
+        [bos_id] + tok(c)["input_ids"] + [eos_id] for c in batch["captions"]
+    ]
 
-    # 1) pad audio once
-    wave, lengths = pad_audio(audios, device)  # wave: [B, T]
-    x_shapes = torch.stack(
+    max_len = max(map(len, caps_bos_eos))
+    teacher_ids = torch.tensor(
+        [seq + [pad_id] * (max_len - len(seq)) for seq in caps_bos_eos], device=device
+    )  # [B, L]
+
+    wave, lengths = pad_audio(batch["audio"], device)  # [B, T] on GPU
+    x_shapes = torch.stack(  # [B, 2]
         [
             torch.zeros_like(torch.tensor(lengths, device=device)),
             torch.tensor(lengths, device=device),
@@ -85,27 +91,22 @@ def ce_loss(student_model, audios, T_out, device):
         dim=1,
     )
 
-    # 2) encoder *with* projection (so channels == d_model)
-    #    -> use the Lightning helper to avoid shape bugs
-    mem = student_model.model.encode_audio(wave, x_shapes)  # [B, T_enc, d_model]
+    mem = student_model.model.encode_audio(wave, x_shapes)  # [B, T_enc, C]
 
-    # 3) shift teacher_ids for decoder input/output
-    dec_in = teacher_ids[:, :-1]  # [B, L-1] <bos> w1 … w_{L-1}
-    dec_tgt = teacher_ids[:, 1:]  # [B, L-1] w1 … w_{L-1} <eos>
+    dec_in = teacher_ids[:, :-1]  # <bos> w1 … w_{L-1}
+    dec_tgt = teacher_ids[:, 1:]  #     w1 … w_{L-1} <eos>
 
-    # 4) embed + positional encode
-    dec_x = student_model.model.decoder.emb_layer(dec_in)  # [B, L-1, d_model]
+    dec_x = student_model.model.decoder.emb_layer(dec_in)
     dec_x = student_model.model.decoder.pos_encoding(dec_x)
-    dec_x = dec_x.transpose(0, 1)  # [L-1, B, d_model]
+    dec_x = dec_x.transpose(0, 1)  # [L-1, B, C]
 
-    # 5) run through each decoder layer (standard PyTorch 2 loop)
-    memory = mem.transpose(0, 1).contiguous()  # [T_enc, B, d_model]
+    memory = mem.transpose(0, 1).contiguous()  # [T_enc, B, C]
     for layer in student_model.model.decoder.layers:
-        dec_x, _ = layer(dec_x, memory)
+        dec_x, _ = layer(dec_x, memory)  # [L-1, B, C]
 
-    # 6) project to vocab, compute CE
     logits = student_model.model.decoder.classifier(dec_x.transpose(0, 1))
     B, Lm1, V = logits.size()
+
     loss_ce = F.cross_entropy(
         logits.reshape(B * Lm1, V), dec_tgt.reshape(B * Lm1), ignore_index=pad_id
     )
@@ -196,7 +197,7 @@ def main():
             # MSE on log‐probs is a simple sequence‐level KD
             loss_seq = F.mse_loss(s_lprobs, t_lprobs)
 
-            loss_ce = ce_loss(student_model, audios, T_out, device)
+            loss_ce = ce_loss(student_model, teacher_model, batch, device)
 
             # plus your feature‐KD
             s_proj = extract_proj(student_model, audios, device)
