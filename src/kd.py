@@ -157,6 +157,7 @@ def main():
                 "frame_embs": enc_outs["frame_embs"],
                 "frame_embs_lens": enc_outs["frame_embs_lens"],
                 "captions": teacher_ids,
+                "audio": audios,
             }
             S_out = student_model.model(batch_dict)
             loss_ce = S_out["loss"]
