@@ -154,7 +154,7 @@ def main():
             loss_feat = contrastive_loss(s_proj, t_proj)
 
             batch_dict = {
-                "frame_embs": enc_outs["frame_embs"],
+                "frame_embs": enc_outs["frame_embs"].transpose(1, 2),
                 "frame_embs_lens": enc_outs["frame_embs_lens"],
                 "captions": teacher_ids,
                 "audio": inputs,
