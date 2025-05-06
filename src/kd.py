@@ -153,8 +153,12 @@ def main():
 
             loss_feat = contrastive_loss(s_proj, t_proj)
 
-            # use the high‐level API: feeds through the decoder under teacher_ids
-            S_out = student_model(audios, captions=teacher_ids)
+            batch_dict = {
+                "frame_embs": enc_outs["frame_embs"],
+                "frame_embs_lens": enc_outs["frame_embs_lens"],
+                "captions": teacher_ids,
+            }
+            S_out = student_model.model(batch_dict)
             loss_ce = S_out["loss"]
 
             loss = lambda_feat * loss_feat + lambda_ce * loss_ce
