@@ -69,50 +69,54 @@ def contrastive_loss(s_proj, t_proj, alpha=0.5):
 def ce_loss(student_model, teacher_model, batch, device):
     gt_caps = batch["captions"]
     tok = teacher_model.model.tokenizers["0"]
-    pad_id = tok.pad_token_id
-    bos_id = tok.bos_token_id
-    eos_id = tok.eos_token_id
 
-    # prepend <bos>, append <eos>
-    caps_bos_eos = [[bos_id] + tok(c) + [eos_id] for c in gt_caps]
+    pad_id = int(tok.pad_token_id)
+    bos_id = int(tok.bos_token_id)
+    eos_id = int(tok.eos_token_id)
+
+    def _ids(x):
+        ids = tok(x)
+        if torch.is_tensor(ids):
+            ids = ids.tolist()
+        return list(map(int, ids))
+
+    caps_bos_eos = [[bos_id] + _ids(c) + [eos_id] for c in gt_caps]
 
     max_len = max(map(len, caps_bos_eos))
-
     teacher_ids = torch.tensor(
         [seq + [pad_id] * (max_len - len(seq)) for seq in caps_bos_eos],
         device=device,
         dtype=torch.long,
     )  # [B, L]
 
-    wave, lengths = pad_audio(batch["audio"], device)  # [B, T] on GPU
-    x_shapes = torch.stack(  # [B, 2]
-        [
+    wave, lengths = pad_audio(batch["audio"], device)
+    x_shapes = torch.stack(
+        (
             torch.zeros_like(torch.tensor(lengths, device=device)),
             torch.tensor(lengths, device=device),
-        ],
+        ),
         dim=1,
     )
 
     mem = student_model.model.encode_audio(wave, x_shapes)  # [B, T_enc, C]
 
-    dec_in = teacher_ids[:, :-1]  # <bos> w1 … w_{L-1}
-    dec_tgt = teacher_ids[:, 1:]  #     w1 … w_{L-1} <eos>
+    dec_in = teacher_ids[:, :-1]
+    dec_tgt = teacher_ids[:, 1:]
 
     dec_x = student_model.model.decoder.emb_layer(dec_in)
     dec_x = student_model.model.decoder.pos_encoding(dec_x)
     dec_x = dec_x.transpose(0, 1)  # [L-1, B, C]
 
-    memory = mem.transpose(0, 1).contiguous()  # [T_enc, B, C]
+    memory = mem.transpose(0, 1).contiguous()
     for layer in student_model.model.decoder.layers:
-        dec_x, _ = layer(dec_x, memory)  # [L-1, B, C]
+        dec_x, _ = layer(dec_x, memory)
 
     logits = student_model.model.decoder.classifier(dec_x.transpose(0, 1))
     B, Lm1, V = logits.size()
 
     loss_ce = F.cross_entropy(
-        logits.reshape(B * Lm1, V), dec_tgt.reshape(B * Lm1), ignore_index=pad_id
+        logits.view(B * Lm1, V), dec_tgt.view(B * Lm1), ignore_index=pad_id
     )
-
     return loss_ce
 
 
