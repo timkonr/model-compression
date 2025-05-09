@@ -67,15 +67,14 @@ def contrastive_loss(s_proj, t_proj, alpha=0.5):
 
 
 def ce_loss(student_model, teacher_model, batch, device):
+    gt_caps = batch["captions"]
     tok = teacher_model.model.tokenizers["0"]
     pad_id = tok.pad_token_id
     bos_id = tok.bos_token_id
     eos_id = tok.eos_token_id
 
     # prepend <bos>, append <eos>
-    caps_bos_eos = [
-        [bos_id] + tok(c)["input_ids"] + [eos_id] for c in batch["captions"]
-    ]
+    caps_bos_eos = [[bos_id] + tok(c) + [eos_id] for c in gt_caps]
 
     max_len = max(map(len, caps_bos_eos))
     teacher_ids = torch.tensor(
