@@ -75,22 +75,20 @@ def ce_loss(student_model, teacher_model, batch, device):
     eos_id = int(tok.eos_token_id)
 
     def _ids(sent):
-        """tokenize -> pure list[int]"""
-        ids = tok(sent)
+        raw = tok(sent)  # could be tensor, list[int], list[tensor], …
+        out = []
 
-        if torch.is_tensor(ids):  # e.g. tensor([  46,  123,  ... ])
-            return ids.flatten().tolist()  # -> [46, 123, ...]
-        elif isinstance(ids, list):
-            # could be list[Tensor] or list[int]
-            out = []
-            for x in ids:
-                if torch.is_tensor(x):  # 0‑D tensor
-                    out.append(int(x.item()))
-                else:
-                    out.append(int(x))
-            return out
-        else:
-            raise TypeError(f"Unexpected type from tokenizer: {type(ids)}")
+        def _flatten(x):
+            if torch.is_tensor(x):
+                out.extend(x.flatten().tolist())  # add every element
+            elif isinstance(x, (list, tuple)):
+                for y in x:
+                    _flatten(y)  # recurse
+            else:  # plain int
+                out.append(int(x))
+
+        _flatten(raw)
+        return out
 
     caps_bos_eos = [[bos_id] + _ids(c) + [eos_id] for c in gt_caps]
 
