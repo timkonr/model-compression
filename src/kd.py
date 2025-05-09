@@ -77,8 +77,11 @@ def ce_loss(student_model, teacher_model, batch, device):
     caps_bos_eos = [[bos_id] + tok(c) + [eos_id] for c in gt_caps]
 
     max_len = max(map(len, caps_bos_eos))
+
     teacher_ids = torch.tensor(
-        [seq + [pad_id] * (max_len - len(seq)) for seq in caps_bos_eos], device=device
+        [seq + [pad_id] * (max_len - len(seq)) for seq in caps_bos_eos],
+        device=device,
+        dtype=torch.long,
     )  # [B, L]
 
     wave, lengths = pad_audio(batch["audio"], device)  # [B, T] on GPU
