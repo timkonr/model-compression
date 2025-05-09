@@ -64,12 +64,10 @@ class EfficientNetB2AudioEncoder(nn.Module):
         feats = self.extractor(x)["feat"]  # [B, C, H', W']
         B, C, H, W = feats.shape
 
-        # flatten → [B, T, C]
-        out = feats.view(B, C, H * W).transpose(1, 2)
-        out = F.layer_norm(out, (out.size(-1),), eps=1e-6)
-
-        # lengths for masking
-        lens = torch.full((B,), out.size(1), dtype=torch.long, device=out.device)
+        out = feats.view(B, C, H * W)  # [B, C, T]   <- no .transpose
+        out = F.layer_norm(out.transpose(1, 2), (C,), eps=1e-6)  # LN on C dim
+        # transpose back to [B, C, T] if you LN this way, or LN per token
+        lens = torch.full((B,), out.size(2), dtype=torch.long, device=out.device)
         return {"frame_embs": out, "frame_embs_lens": lens}
 
 
