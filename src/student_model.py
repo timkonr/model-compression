@@ -63,7 +63,7 @@ class EfficientNetB2AudioEncoder(nn.Module):
         # EfficientNet features
         feats = self.extractor(x)["feat"]  # [B, C, H, W]
         B, C, H, W = feats.shape
-        out = feats.permute(0, 2, 3, 1).reshape(B, H * W, C)  # [B, T, C]  tokens‑first
+        out = feats.view(B, C, H * W).transpose(1, 2)  # [B, 16, 352]  tokens‑first
         out = F.layer_norm(out, (C,), eps=1e-6)
 
         lens = torch.full((B,), out.size(1), dtype=torch.long, device=out.device)  # = T
