@@ -136,7 +136,9 @@ def ce_loss(student_model, teacher_model, batch, device):
     B, Lm1, V = logits.size()
 
     loss_ce = F.cross_entropy(
-        logits.view(B * Lm1, V), dec_tgt.view(B * Lm1), ignore_index=pad_id
+        logits.reshape(-1, V),
+        dec_tgt.reshape(-1),
+        ignore_index=pad_id,
     )
     return loss_ce
 
