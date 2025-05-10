@@ -61,12 +61,15 @@ class EfficientNetB2AudioEncoder(nn.Module):
         x = F.interpolate(x, size=(128, 128), mode="bilinear", align_corners=False)
 
         # EfficientNet features
-        feats = self.extractor(x)["feat"]  # [B, C, H, W]
+        feats = self.extractor(x)["feat"]  # [B, C, H', W']
         B, C, H, W = feats.shape
-        out = feats.view(B, C, H * W).transpose(1, 2)  # [B, 16, 352]  tokens‑first
-        out = F.layer_norm(out, (C,), eps=1e-6)
 
-        lens = torch.full((B,), out.size(1), dtype=torch.long, device=out.device)  # = T
+        # flatten → [B, T, C]
+        out = feats.view(B, C, H * W).transpose(1, 2)
+        out = F.layer_norm(out, (out.size(-1),), eps=1e-6)
+
+        # lengths for masking
+        lens = torch.full((B,), out.size(1), dtype=torch.long, device=out.device)
         return {"frame_embs": out, "frame_embs_lens": lens}
 
 
@@ -82,8 +85,9 @@ class Projection(nn.Module):
         self.dropout2 = nn.Dropout(p)
 
     def forward(self, x):
-        # x: [B, T, C]  (tokens‑first)
+        # x: [B, C, T]
         x = self.dropout1(x)
+        x = x.transpose(1, 2)  # → [B, T, C]
         x = self.lin(x)  # → [B, T, out_ch]
         x = self.relu(x)
         x = x.transpose(1, 2)  # → [B, out_ch, T]
