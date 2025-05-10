@@ -197,8 +197,8 @@ def main():
     best_val = float("inf")
     best_epoch = 0
     no_improve = 0
-    lambda_feat = 1.0  # contrastive loss weight
-    lambda_seq = 0.03  # sequence level KD weight
+    lambda_feat = 0.3  # contrastive loss weight
+    lambda_seq = 0.02  # sequence level KD weight
     lambda_ce = 1.0  # cross entropy loss weight
 
     for epoch in range(1, config.num_epochs + 1):
