@@ -130,7 +130,7 @@ def ce_loss(student_model, teacher_model, batch, device):
     memory = mem.transpose(0, 1)  # T,B,d
 
     for layer in student_model.model.decoder.layers:
-        dec_x, _ = layer(dec_x, memory)
+        dec_x = layer(dec_x, memory)
 
     logits = student_model.model.decoder.classifier(dec_x.transpose(0, 1))
     B, Lm1, V = logits.size()
