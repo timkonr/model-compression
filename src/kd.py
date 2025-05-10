@@ -268,7 +268,7 @@ def main():
             evaluate(
                 candidates=candidates,
                 mult_references=mult_references,
-                metrics=["bleu_1", "fense", "spider-fl"],
+                metrics=["bleu_1", "fense", "spider_fl"],
             )
 
         # early stopping logic
