@@ -262,7 +262,7 @@ def main():
                 audios = batch["audio"]
                 with torch.no_grad():
                     outputs = student_model(audios, task="clotho")
-                    candidates.append(outputs["cands"])
+                    candidates.extend(outputs["cands"])
                     mult_references.append(batch["captions"])
 
             evaluate(
