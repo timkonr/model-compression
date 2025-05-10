@@ -67,38 +67,45 @@ def contrastive_loss(s_proj, t_proj, alpha=0.5):
 
 
 def ce_loss(student_model, teacher_model, batch, device):
-    gt_caps = batch["captions"]
-    tok = teacher_model.model.tokenizers["0"]
+    """
+    Args
+    ----
+    student_model : distilled CoNeTTEModel  (on GPU)
+    teacher_model : full teacher (for tokenizer only)
+    batch         : dict from BasicCollate
+        ├─ "audio"     : list[Tensor]   waveforms (variable length)
+        └─ "captions"  : list[str]      ground‑truth sentences
+    device        : torch.device
+    Returns
+    -------
+    loss_ce : scalar tensor
+    """
 
+    # ---------- 1) tokenise captions ---------------------------------
+    tok = teacher_model.model.tokenizers["0"]
     pad_id = int(tok.pad_token_id)
     bos_id = int(tok.bos_token_id)
     eos_id = int(tok.eos_token_id)
 
-    def _ids(sent):
-        raw = tok(sent)  # could be tensor, list[int], list[tensor], …
-        out = []
+    def _flat_ids(sent):
+        """AACTokenizer may yield tensor / list[list]. Flatten to list[int]."""
+        ids = tok(sent)
+        if torch.is_tensor(ids):
+            return ids.flatten().tolist()
+        flat = []
+        for x in ids if isinstance(ids, (list, tuple)) else [ids]:
+            flat.extend(x.flatten().tolist() if torch.is_tensor(x) else [int(x)])
+        return flat
 
-        def _flatten(x):
-            if torch.is_tensor(x):
-                out.extend(x.flatten().tolist())  # add every element
-            elif isinstance(x, (list, tuple)):
-                for y in x:
-                    _flatten(y)  # recurse
-            else:  # plain int
-                out.append(int(x))
-
-        _flatten(raw)
-        return out
-
-    caps_bos_eos = [[bos_id] + _ids(c) + [eos_id] for c in gt_caps]
-
-    max_len = max(map(len, caps_bos_eos))
+    seqs = [[bos_id] + _flat_ids(c) + [eos_id] for c in batch["captions"]]
+    max_len = max(map(len, seqs))
     teacher_ids = torch.tensor(
-        [seq + [pad_id] * (max_len - len(seq)) for seq in caps_bos_eos],
+        [s + [pad_id] * (max_len - len(s)) for s in seqs],
         device=device,
         dtype=torch.long,
     )  # [B, L]
 
+    # ---------- 2) encoder memory ------------------------------------
     wave, lengths = pad_audio(batch["audio"], device)
     x_shapes = torch.stack(
         (
@@ -106,18 +113,20 @@ def ce_loss(student_model, teacher_model, batch, device):
             torch.tensor(lengths, device=device),
         ),
         dim=1,
-    )
+    )  # [B, 2]
 
-    mem = student_model.model.encode_audio(wave, x_shapes)  # [B, T_enc, C]
+    # encode_audio() already applies the Projection → [B, d_model, T_enc]
+    mem = student_model.model.encode_audio(wave, x_shapes)
 
-    dec_in = teacher_ids[:, :-1]
-    dec_tgt = teacher_ids[:, 1:]
+    # ---------- 3) decoder teacher‑forcing ---------------------------
+    dec_in = teacher_ids[:, :-1]  # input  (<bos> …)
+    dec_tgt = teacher_ids[:, 1:]  # target (… <eos>)
 
     dec_x = student_model.model.decoder.emb_layer(dec_in)
     dec_x = student_model.model.decoder.pos_encoding(dec_x)
-    dec_x = dec_x.transpose(0, 1)  # [L-1, B, C]
+    dec_x = dec_x.transpose(0, 1)  # [L-1, B, d_model]
 
-    memory = mem.transpose(0, 1).contiguous()
+    memory = mem.transpose(0, 1).contiguous()  # [T_enc, B, d_model]
     for layer in student_model.model.decoder.layers:
         dec_x, _ = layer(dec_x, memory)
 
