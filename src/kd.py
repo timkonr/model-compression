@@ -66,6 +66,17 @@ def contrastive_loss(s_proj, t_proj, alpha=0.5):
     return loss
 
 
+def _flat_ids(sent):
+    """AACTokenizer may yield tensor / list[list]. Flatten to list[int]."""
+    ids = tok(sent)
+    if torch.is_tensor(ids):
+        return ids.flatten().tolist()
+    flat = []
+    for x in ids if isinstance(ids, (list, tuple)) else [ids]:
+        flat.extend(x.flatten().tolist() if torch.is_tensor(x) else [int(x)])
+    return flat
+
+
 def ce_loss(student_model, teacher_model, batch, device):
     """
     Args
@@ -86,16 +97,6 @@ def ce_loss(student_model, teacher_model, batch, device):
     pad_id = int(tok.pad_token_id)
     bos_id = int(tok.bos_token_id)
     eos_id = int(tok.eos_token_id)
-
-    def _flat_ids(sent):
-        """AACTokenizer may yield tensor / list[list]. Flatten to list[int]."""
-        ids = tok(sent)
-        if torch.is_tensor(ids):
-            return ids.flatten().tolist()
-        flat = []
-        for x in ids if isinstance(ids, (list, tuple)) else [ids]:
-            flat.extend(x.flatten().tolist() if torch.is_tensor(x) else [int(x)])
-        return flat
 
     seqs = [[bos_id] + _flat_ids(c) + [eos_id] for c in batch["captions"]]
     max_len = max(map(len, seqs))
@@ -149,18 +150,17 @@ def debug_ce(student_model, teacher_model, batch, device):
     pad_id = int(tok.pad_token_id)
     bos_id, eos_id = int(tok.bos_token_id), int(tok.eos_token_id)
 
-    def tokenize(txts):
-        seqs = [[bos_id] + tok(t) + [eos_id] for t in txts]
-        max_len = max(map(len, seqs))
-        return torch.tensor(
-            [s + [pad_id] * (max_len - len(s)) for s in seqs], device=device
-        )
-
     # ---------- prep data --------------
     audios = batch["audio"]
     gt_caps = batch["captions"]
 
-    teacher_ids = tokenize(gt_caps)  # [B,L]
+    seqs = [[bos_id] + _flat_ids(c) + [eos_id] for c in batch["captions"]]
+    max_len = max(map(len, seqs))
+    teacher_ids = torch.tensor(
+        [s + [pad_id] * (max_len - len(s)) for s in seqs],
+        device=device,
+        dtype=torch.long,
+    )  # [B, L]
 
     # ---------- teacher CE -------------
     with torch.no_grad():
