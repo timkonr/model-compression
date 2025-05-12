@@ -193,8 +193,9 @@ def main():
     )
 
     # debug information
-    print("Student vocab size:", student_model.model.decoder.classifier.out_features)
-    print("Tokenizer vocab size:", student_model.model.tokenizers["0"].vocabulary_size)
+    v_teacher = teacher_model.model.decoder.classifier.out_features
+    v_student = student_model.model.decoder.classifier.out_features
+    print("Vocab sizes teacher, student", v_teacher, v_student)
     with torch.no_grad():
         batch = next(iter(train_loader))
         print(
