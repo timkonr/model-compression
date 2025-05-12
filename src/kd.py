@@ -145,7 +145,7 @@ def ce_loss(student_model, teacher_model, batch, device):
 
     teacher_ids = tokenize(
         tok,
-        batch["captions"],
+        batch["captions"][0],
         pad_id=pad_id,
         bos_id=bos_id,
         eos_id=eos_id,
@@ -198,7 +198,7 @@ def debug_ce(student_model, teacher_model, batch, device):
 
     # ---------- prep data --------------
     audios = batch["audio"]
-    gt_caps = batch["captions"]
+    gt_caps = batch["captions"][0]
 
     teacher_ids = tokenize(
         tok,
