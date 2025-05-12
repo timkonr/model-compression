@@ -130,7 +130,7 @@ def ce_loss(student_model, teacher_model, batch, device):
     teacher_model : full teacher (for tokenizer only)
     batch         : dict from BasicCollate
         ├─ "audio"     : list[Tensor]   waveforms (variable length)
-        └─ "captions"  : list[str]      ground‑truth sentences
+        └─ "captions"  : list[list[str]]      ground‑truth sentences
     device        : torch.device
     Returns
     -------
@@ -167,16 +167,28 @@ def ce_loss(student_model, teacher_model, batch, device):
     mem = student_model.model.projection(fe)  # B,d,T
     memory = mem.permute(2, 0, 1).contiguous()  # B,T,d
 
+    # mask: True for PAD positions in *memory*
+    pad_len = memory.size(0)  # T_enc
+    mem_mask = torch.zeros(
+        len(batch["audio"]), pad_len, dtype=torch.bool, device=device
+    )
+
     # ---------- 3) decoder teacher‑forcing ---------------------------
     dec_in = teacher_ids[:, :-1]  # input  (<bos> …)
     dec_tgt = teacher_ids[:, 1:]  # target (… <eos>)
+    tgt_pad_mask = dec_in.eq(pad_id)  # [B,L-1]
 
     dec_x = student_model.model.decoder.emb_layer(dec_in)
     dec_x = student_model.model.decoder.pos_encoding(dec_x)
-    dec_x = dec_x.transpose(0, 1)  # L-1,B,d
+    dec_x = dec_x.transpose(0, 1).contiguous()  # L-1,B,d
 
     for layer in student_model.model.decoder.layers:
-        dec_x = layer(dec_x, memory)
+        dec_x = layer(
+            dec_x,
+            memory,
+            tgt_key_padding_mask=tgt_pad_mask,
+            memory_key_padding_mask=mem_mask,
+        )
 
     logits = student_model.model.decoder.classifier(dec_x.transpose(0, 1))
     B, Lm1, V = logits.size()
