@@ -66,32 +66,48 @@ def contrastive_loss(s_proj, t_proj, alpha=0.5):
     return loss
 
 
-def _flat_ids(tok, sent):
+def text_to_ids(tok, sent):
     """
-    AACTokenizer → list[int]  (handles Tensor / list[str] / list[int] cases)
+    Return pure list[int] token IDs for one caption string.
+    Works with every AACTokenizer version.
     """
-    if hasattr(tok, "encode"):  # AACTokenizer has .encode
-        return tok.encode(sent)  # pure list[int], fastest path
+    # --- 1. HF‑style call returns dict --------------------------------
+    out = tok(sent)
+    if isinstance(out, dict) and "input_ids" in out:
+        return list(map(int, out["input_ids"]))
 
-    ids = tok(sent)  # fallback: may return strings
-    # --- fall back to robust flattening (for older versions) ---
-    out = []
+    # --- 2. encode() exists -------------------------------------------
+    if hasattr(tok, "encode"):
+        ids = tok.encode(sent)
+        if isinstance(ids, (list, tuple)) and all(isinstance(i, int) for i in ids):
+            return list(ids)
 
-    def _add(x):
+    # --- 3. got list[str] tokens -> convert to IDs --------------------
+    if isinstance(out, (list, tuple)) and isinstance(out[0], str):
+        return list(map(int, tok.convert_tokens_to_ids(out)))
+
+    # --- 4. fallback: flatten tensors / ints --------------------------
+    if torch.is_tensor(out):
+        return out.flatten().tolist()
+
+    # nested list / tensors
+    flat = []
+
+    def _rec(x):
         if torch.is_tensor(x):
-            out.extend(x.flatten().tolist())
+            flat.extend(x.flatten().tolist())
         elif isinstance(x, (list, tuple)):
             for y in x:
-                _add(y)
+                _rec(y)
         else:
-            out.append(int(x))
+            flat.append(int(x))
 
-    _add(ids)
-    return out
+    _rec(out)
+    return flat
 
 
 def tokenize(tok, captions, pad_id, bos_id, eos_id, device):
-    seqs = [[bos_id] + _flat_ids(tok, c) + [eos_id] for c in captions]
+    seqs = [[bos_id] + text_to_ids(tok, c) + [eos_id] for c in captions]
     L = max(map(len, seqs))
     return torch.tensor(
         [s + [pad_id] * (L - len(s)) for s in seqs], device=device, dtype=torch.long
