@@ -71,10 +71,8 @@ def _flat_ids(tok, sent):
     AACTokenizer → list[int]  (handles Tensor / list[str] / list[int] cases)
     """
     if hasattr(tok, "encode"):  # AACTokenizer has .encode
-        print("Using .encode()")
         return tok.encode(sent)  # pure list[int], fastest path
 
-    print("Using custom tokens")
     ids = tok(sent)  # fallback: may return strings
     # --- fall back to robust flattening (for older versions) ---
     out = []
