@@ -143,6 +143,41 @@ def ce_loss(student_model, teacher_model, batch, device):
     return loss_ce
 
 
+def debug_ce(student_model, teacher_model, batch, device):
+    # ---------- helper -----------------
+    tok = teacher_model.model.tokenizers["0"]
+    pad_id = int(tok.pad_token_id)
+    bos_id, eos_id = int(tok.bos_token_id), int(tok.eos_token_id)
+
+    def tokenize(txts):
+        seqs = [[bos_id] + tok(t) + [eos_id] for t in txts]
+        L = max(map(len, seqs))
+        return torch.tensor([s + [pad_id] * (L - len(s)) for s in seqs], device=device)
+
+    # ---------- prep data --------------
+    audios = batch["audio"]
+    gt_caps = batch["captions"]
+
+    teacher_ids = tokenize(gt_caps)  # [B,L]
+
+    # ---------- teacher CE -------------
+    with torch.no_grad():
+        loss_t = ce_loss(
+            teacher_model, teacher_model, {"audio": audios, "captions": gt_caps}, device
+        )
+    print(" Teacher CE:", loss_t.item())
+
+    # ---------- student CE -------------
+    loss_s = ce_loss(
+        student_model, teacher_model, {"audio": audios, "captions": gt_caps}, device
+    )
+    print(" Student CE:", loss_s.item())
+
+    # ---------- sanity shift -----------
+    print("dec_in  :", teacher_ids[0][:10].tolist())
+    print("dec_tgt :", teacher_ids[0][1:11].tolist())
+
+
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -202,6 +237,7 @@ def main():
             "Initial CE loss:",
             ce_loss(student_model, teacher_model, batch, device).item(),
         )
+        debug_ce(student_model, teacher_model, batch, device)
 
     print("Starting distillation…")
 
