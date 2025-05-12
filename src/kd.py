@@ -122,7 +122,7 @@ def tokenize(tok, captions, pad_id, bos_id, eos_id, device, debug=False):
     )
 
 
-def ce_loss(student_model, teacher_model, batch, device):
+def ce_loss(student_model, teacher_model, batch, device, debug=False):
     """
     Args
     ----
@@ -161,82 +161,28 @@ def ce_loss(student_model, teacher_model, batch, device):
         ),
         dim=1,
     )  # [B, 2]
-
-    enc_out = student_model.preprocessor.encoder(wave, x_shapes)  # B,T,C
-    fe = enc_out["frame_embs"].transpose(1, 2).contiguous()  # B,C,T
-    mem = student_model.model.projection(fe)  # B,d,T
-    memory = mem.permute(2, 0, 1).contiguous()  # B,T,d
-
-    # mask: True for PAD positions in *memory*
-    pad_len = memory.size(0)  # T_enc
-    mem_mask = torch.zeros(
-        len(batch["audio"]), pad_len, dtype=torch.bool, device=device
-    )
+    memory = student_model.model.encode_audio(wave, x_shapes)  # [B,T,d]
+    memory = memory.transpose(0, 1).contiguous()  # [T,B,d]
 
     # ---------- 3) decoder teacher‑forcing ---------------------------
     dec_in = teacher_ids[:, :-1]  # input  (<bos> …)
     dec_tgt = teacher_ids[:, 1:]  # target (… <eos>)
     tgt_pad_mask = dec_in.eq(pad_id)  # [B,L-1]
 
-    dec_x = student_model.model.decoder.emb_layer(dec_in)
-    dec_x = student_model.model.decoder.pos_encoding(dec_x)
-    dec_x = dec_x.transpose(0, 1).contiguous()  # L-1,B,d
+    dec = student_model.model.decoder
+    x = dec.emb_layer(dec_in)
+    x = dec.pos_encoding(x).transpose(0, 1).contiguous()  # [L-1,B,d]
 
-    for layer in student_model.model.decoder.layers:
-        dec_x = layer(
-            dec_x,
-            memory,
-            tgt_key_padding_mask=tgt_pad_mask,
-            memory_key_padding_mask=mem_mask,
+    for layer in dec.layers:
+        x = layer(
+            x, memory, tgt_key_padding_mask=tgt_pad_mask, memory_key_padding_mask=None
         )
 
-    logits = student_model.model.decoder.classifier(dec_x.transpose(0, 1))
-    B, Lm1, V = logits.size()
-
-    loss_ce = F.cross_entropy(
-        logits.reshape(-1, V),
-        dec_tgt.reshape(-1),
-        ignore_index=pad_id,
+    logits = dec.classifier(x.transpose(0, 1))  # [B,L-1,V]
+    loss = F.cross_entropy(
+        logits.reshape(-1, logits.size(-1)), dec_tgt.reshape(-1), ignore_index=pad_id
     )
-    return loss_ce
-
-
-def debug_ce(student_model, teacher_model, batch, device):
-    # ---------- helper -----------------
-    tok = teacher_model.model.tokenizers["0"]
-    pad_id = int(tok.pad_token_id)
-    bos_id, eos_id = int(tok.bos_token_id), int(tok.eos_token_id)
-
-    # ---------- prep data --------------
-    audios = batch["audio"]
-    gt_caps = batch["captions"][0]
-
-    teacher_ids = tokenize(
-        tok,
-        gt_caps,
-        pad_id=pad_id,
-        bos_id=bos_id,
-        eos_id=eos_id,
-        device=device,
-        debug=True,
-    )  # [B, L]
-
-    # ---------- teacher CE -------------
-    with torch.no_grad():
-        loss_t = ce_loss(
-            teacher_model, teacher_model, {"audio": audios, "captions": gt_caps}, device
-        )
-    print(" Teacher CE:", loss_t.item())
-
-    # ---------- student CE -------------
-    loss_s = ce_loss(
-        student_model, teacher_model, {"audio": audios, "captions": gt_caps}, device
-    )
-    print(" Student CE:", loss_s.item())
-
-    # ---------- sanity shift -----------
-    print("dec_in  :", teacher_ids[0][:10].tolist())
-    print("dec_tgt :", teacher_ids[0][1:11].tolist())
+    return loss
 
 
 def main():
@@ -294,14 +240,15 @@ def main():
     print("Vocab sizes teacher, student", v_teacher, v_student)
     with torch.no_grad():
         batch = next(iter(train_loader))
+        print("batch: ", batch)
         print(
             "Initial CE loss:",
             ce_loss(student_model, teacher_model, batch, device).item(),
         )
-        debug_ce(student_model, teacher_model, batch, device)
 
     print("Starting distillation…")
 
+    debug_ce = True
     best_val = float("inf")
     best_epoch = 0
     no_improve = 0
@@ -334,8 +281,8 @@ def main():
             # MSE on log‐probs is a simple sequence‐level KD
             loss_seq = F.mse_loss(s_lprobs, t_lprobs)
 
-            loss_ce = ce_loss(student_model, teacher_model, batch, device)
-
+            loss_ce = ce_loss(student_model, teacher_model, batch, device, debug_ce)
+            debug_ce = False
             # plus your feature‐KD
             s_proj = extract_proj(student_model, audios, device)
             if t_proj.size(2) != s_proj.size(2):
