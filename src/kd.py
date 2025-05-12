@@ -151,8 +151,10 @@ def debug_ce(student_model, teacher_model, batch, device):
 
     def tokenize(txts):
         seqs = [[bos_id] + tok(t) + [eos_id] for t in txts]
-        L = max(map(len, seqs))
-        return torch.tensor([s + [pad_id] * (L - len(s)) for s in seqs], device=device)
+        max_len = max(map(len, seqs))
+        return torch.tensor(
+            [s + [pad_id] * (max_len - len(s)) for s in seqs], device=device
+        )
 
     # ---------- prep data --------------
     audios = batch["audio"]
