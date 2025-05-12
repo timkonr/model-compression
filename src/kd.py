@@ -67,14 +67,37 @@ def contrastive_loss(s_proj, t_proj, alpha=0.5):
 
 
 def _flat_ids(tok, sent):
-    """AACTokenizer may yield tensor / list[list]. Flatten to list[int]."""
-    ids = tok(sent)
-    if torch.is_tensor(ids):
-        return ids.flatten().tolist()
-    flat = []
-    for x in ids if isinstance(ids, (list, tuple)) else [ids]:
-        flat.extend(x.flatten().tolist() if torch.is_tensor(x) else [int(x)])
-    return flat
+    """
+    AACTokenizer → list[int]  (handles Tensor / list[str] / list[int] cases)
+    """
+    if hasattr(tok, "encode"):  # AACTokenizer has .encode
+        print("Using .encode()")
+        return tok.encode(sent)  # pure list[int], fastest path
+
+    print("Using custom tokens")
+    ids = tok(sent)  # fallback: may return strings
+    # --- fall back to robust flattening (for older versions) ---
+    out = []
+
+    def _add(x):
+        if torch.is_tensor(x):
+            out.extend(x.flatten().tolist())
+        elif isinstance(x, (list, tuple)):
+            for y in x:
+                _add(y)
+        else:
+            out.append(int(x))
+
+    _add(ids)
+    return out
+
+
+def tokenize(tok, captions, pad_id, bos_id, eos_id, device):
+    seqs = [[bos_id] + _flat_ids(tok, c) + [eos_id] for c in captions]
+    L = max(map(len, seqs))
+    return torch.tensor(
+        [s + [pad_id] * (L - len(s)) for s in seqs], device=device, dtype=torch.long
+    )
 
 
 def ce_loss(student_model, teacher_model, batch, device):
@@ -98,12 +121,13 @@ def ce_loss(student_model, teacher_model, batch, device):
     bos_id = int(tok.bos_token_id)
     eos_id = int(tok.eos_token_id)
 
-    seqs = [[bos_id] + _flat_ids(tok, c) + [eos_id] for c in batch["captions"]]
-    max_len = max(map(len, seqs))
-    teacher_ids = torch.tensor(
-        [s + [pad_id] * (max_len - len(s)) for s in seqs],
+    teacher_ids = tokenize(
+        tok,
+        batch["captions"],
+        pad_id=pad_id,
+        bos_id=bos_id,
+        eos_id=eos_id,
         device=device,
-        dtype=torch.long,
     )  # [B, L]
 
     # ---------- 2) encoder memory ------------------------------------
@@ -154,12 +178,13 @@ def debug_ce(student_model, teacher_model, batch, device):
     audios = batch["audio"]
     gt_caps = batch["captions"]
 
-    seqs = [[bos_id] + _flat_ids(tok, c) + [eos_id] for c in batch["captions"]]
-    max_len = max(map(len, seqs))
-    teacher_ids = torch.tensor(
-        [s + [pad_id] * (max_len - len(s)) for s in seqs],
+    teacher_ids = tokenize(
+        tok,
+        gt_caps,
+        pad_id=pad_id,
+        bos_id=bos_id,
+        eos_id=eos_id,
         device=device,
-        dtype=torch.long,
     )  # [B, L]
 
     # ---------- teacher CE -------------
