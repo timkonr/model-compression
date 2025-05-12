@@ -192,6 +192,16 @@ def main():
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps
     )
 
+    # debug information
+    print("Student vocab size:", student_model.model.decoder.classifier.out_features)
+    print("Tokenizer vocab size:", student_model.model.tokenizers["0"].vocabulary_size)
+    with torch.no_grad():
+        batch = next(iter(train_loader))
+        print(
+            "Initial CE loss:",
+            ce_loss(student_model, teacher_model, batch, device).item(),
+        )
+
     print("Starting distillation…")
 
     best_val = float("inf")
