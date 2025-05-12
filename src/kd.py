@@ -77,10 +77,10 @@ def text_to_ids(tok, sent, print_tok=False):
         print("text_to_ids:", sent)
         print("  out:", out)
         print("  type(out):", type(out))
-        print("  out.keys():", out.keys())
-        print("  out['input_ids']:", out["input_ids"])
-        print("  type(out['input_ids']):", type(out["input_ids"]))
-        print("  out['input_ids'].shape:", out["input_ids"].shape)
+        print("tok:", tok)
+        print("  type(tok):", type(tok))
+        if hasattr(tok, "keys"):
+            print("  tok.keys():", tok.keys())
     if isinstance(out, dict) and "input_ids" in out:
         return list(map(int, out["input_ids"]))
 
