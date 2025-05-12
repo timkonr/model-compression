@@ -23,7 +23,6 @@ from student_model import (
 )
 
 torch.backends.cudnn.benchmark = True
-print_tok = True
 
 
 def validate_student(student, teacher, loader, device):
@@ -67,7 +66,7 @@ def contrastive_loss(s_proj, t_proj, alpha=0.5):
     return loss
 
 
-def text_to_ids(tok, sent):
+def text_to_ids(tok, sent, print_tok=False):
     """
     Return pure list[int] token IDs for one caption string.
     Works with every AACTokenizer version.
@@ -82,7 +81,6 @@ def text_to_ids(tok, sent):
         print("  out['input_ids']:", out["input_ids"])
         print("  type(out['input_ids']):", type(out["input_ids"]))
         print("  out['input_ids'].shape:", out["input_ids"].shape)
-        print_tok = False
     if isinstance(out, dict) and "input_ids" in out:
         return list(map(int, out["input_ids"]))
 
@@ -116,8 +114,8 @@ def text_to_ids(tok, sent):
     return flat
 
 
-def tokenize(tok, captions, pad_id, bos_id, eos_id, device):
-    seqs = [[bos_id] + text_to_ids(tok, c) + [eos_id] for c in captions]
+def tokenize(tok, captions, pad_id, bos_id, eos_id, device, debug=False):
+    seqs = [[bos_id] + text_to_ids(tok, c, debug) + [eos_id] for c in captions]
     L = max(map(len, seqs))
     return torch.tensor(
         [s + [pad_id] * (L - len(s)) for s in seqs], device=device, dtype=torch.long
@@ -209,6 +207,7 @@ def debug_ce(student_model, teacher_model, batch, device):
         bos_id=bos_id,
         eos_id=eos_id,
         device=device,
+        debug=True,
     )  # [B, L]
 
     # ---------- teacher CE -------------
