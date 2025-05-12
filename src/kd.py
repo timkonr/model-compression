@@ -165,7 +165,7 @@ def ce_loss(student_model, teacher_model, batch, device):
     enc_out = student_model.preprocessor.encoder(wave, x_shapes)  # B,T,C
     fe = enc_out["frame_embs"].transpose(1, 2).contiguous()  # B,C,T
     mem = student_model.model.projection(fe)  # B,d,T
-    mem = mem.transpose(1, 2).contiguous()  # B,T,d
+    memory = mem.permute(2, 0, 1).contiguous()  # B,T,d
 
     # ---------- 3) decoder teacher‑forcing ---------------------------
     dec_in = teacher_ids[:, :-1]  # input  (<bos> …)
@@ -174,7 +174,6 @@ def ce_loss(student_model, teacher_model, batch, device):
     dec_x = student_model.model.decoder.emb_layer(dec_in)
     dec_x = student_model.model.decoder.pos_encoding(dec_x)
     dec_x = dec_x.transpose(0, 1)  # L-1,B,d
-    memory = mem.transpose(0, 1)  # T,B,d
 
     for layer in student_model.model.decoder.layers:
         dec_x = layer(dec_x, memory)
