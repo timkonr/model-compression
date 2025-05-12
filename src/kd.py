@@ -66,7 +66,7 @@ def contrastive_loss(s_proj, t_proj, alpha=0.5):
     return loss
 
 
-def _flat_ids(sent):
+def _flat_ids(tok, sent):
     """AACTokenizer may yield tensor / list[list]. Flatten to list[int]."""
     ids = tok(sent)
     if torch.is_tensor(ids):
@@ -98,7 +98,7 @@ def ce_loss(student_model, teacher_model, batch, device):
     bos_id = int(tok.bos_token_id)
     eos_id = int(tok.eos_token_id)
 
-    seqs = [[bos_id] + _flat_ids(c) + [eos_id] for c in batch["captions"]]
+    seqs = [[bos_id] + _flat_ids(tok, c) + [eos_id] for c in batch["captions"]]
     max_len = max(map(len, seqs))
     teacher_ids = torch.tensor(
         [s + [pad_id] * (max_len - len(s)) for s in seqs],
@@ -154,7 +154,7 @@ def debug_ce(student_model, teacher_model, batch, device):
     audios = batch["audio"]
     gt_caps = batch["captions"]
 
-    seqs = [[bos_id] + _flat_ids(c) + [eos_id] for c in batch["captions"]]
+    seqs = [[bos_id] + _flat_ids(tok, c) + [eos_id] for c in batch["captions"]]
     max_len = max(map(len, seqs))
     teacher_ids = torch.tensor(
         [s + [pad_id] * (max_len - len(s)) for s in seqs],
