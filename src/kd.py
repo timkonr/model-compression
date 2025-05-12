@@ -23,6 +23,7 @@ from student_model import (
 )
 
 torch.backends.cudnn.benchmark = True
+print_tok = True
 
 
 def validate_student(student, teacher, loader, device):
@@ -73,6 +74,15 @@ def text_to_ids(tok, sent):
     """
     # --- 1. HF‑style call returns dict --------------------------------
     out = tok(sent)
+    if print_tok:
+        print("text_to_ids:", sent)
+        print("  out:", out)
+        print("  type(out):", type(out))
+        print("  out.keys():", out.keys())
+        print("  out['input_ids']:", out["input_ids"])
+        print("  type(out['input_ids']):", type(out["input_ids"]))
+        print("  out['input_ids'].shape:", out["input_ids"].shape)
+        print_tok = False
     if isinstance(out, dict) and "input_ids" in out:
         return list(map(int, out["input_ids"]))
 
