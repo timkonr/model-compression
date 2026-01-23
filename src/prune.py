@@ -1,11 +1,11 @@
 import torch
+import torch.nn as nn
 from pruner import ModelPruner
 from train import train
 from aac_datasets import Clotho
 from torch.utils.data import DataLoader
 from aac_datasets.utils.collate import BasicCollate
 import torch_pruning as tp
-import torch.fx
 from typing import Any, Iterable, Optional, Union
 from torch import Tensor, Size
 import config
@@ -175,7 +175,7 @@ def apply_global_unstructured_pruning(
     return model
 
 
-def prune(model, fine_tune=True):
+def prune_old(model, fine_tune=True):
     pruner = ModelPruner(model, prune_ratio=0.2)
     model = pruner.prune_model()
     if fine_tune:
@@ -187,4 +187,63 @@ def prune(model, fine_tune=True):
         train_loader = DataLoader(train_ds, batch_size=32, collate_fn=collate)
         val_loader = DataLoader(val_ds, batch_size=32, collate_fn=collate)
         model = train(model, train_loader, val_loader)
+    return model
+
+
+@torch.no_grad()
+def prune(model: nn.Module, keep_ratio: float = 0.5, verbose: bool = True):
+    """
+    Structured pruning: shrink FFN hidden dim in every decoder layer by keeping top-k neurons.
+    Assumes each layer has .linear1 (d_ff x d_model) and .linear2 (d_model x d_ff).
+    keep_ratio=0.5 means 2048 -> 1024.
+    """
+    model.eval()
+
+    # Path in your model: model.model.decoder.layers.<i>.linear1 / linear2
+    dec = model.model.decoder
+    layers = dec.layers
+
+    for li, layer in enumerate(layers):
+        fc1: nn.Linear = layer.linear1
+        fc2: nn.Linear = layer.linear2
+
+        d_ff = fc1.out_features
+        d_model = fc1.in_features
+
+        if fc2.in_features != d_ff or fc2.out_features != d_model:
+            raise RuntimeError(
+                f"Unexpected shapes at layer {li}: "
+                f"linear1 {tuple(fc1.weight.shape)}, linear2 {tuple(fc2.weight.shape)}"
+            )
+
+        k = int(round(d_ff * keep_ratio))
+        k = max(1, min(k, d_ff))
+
+        # Importance score per FFN neuron (row of fc1)
+        # You can also try (fc1.weight.abs().mean(dim=1)) – L2 usually works fine
+        scores = fc1.weight.norm(p=2, dim=1)  # (d_ff,)
+        keep_idx = torch.topk(scores, k=k, largest=True).indices
+        keep_idx, _ = torch.sort(keep_idx)  # stable order
+
+        # Create new smaller linears
+        new_fc1 = nn.Linear(d_model, k, bias=(fc1.bias is not None))
+        new_fc2 = nn.Linear(k, d_model, bias=(fc2.bias is not None))
+
+        # Copy weights/bias
+        new_fc1.weight.copy_(fc1.weight[keep_idx, :])
+        if fc1.bias is not None:
+            new_fc1.bias.copy_(fc1.bias[keep_idx])
+
+        # fc2.weight shape: (d_model, d_ff) -> keep columns
+        new_fc2.weight.copy_(fc2.weight[:, keep_idx])
+        if fc2.bias is not None:
+            new_fc2.bias.copy_(fc2.bias)
+
+        # Replace modules in-place
+        layer.linear1 = new_fc1
+        layer.linear2 = new_fc2
+
+        if verbose:
+            print(f"Decoder layer {li}: d_ff {d_ff} -> {k}")
+
     return model
