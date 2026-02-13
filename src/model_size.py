@@ -1,4 +1,5 @@
-import io, torch
+import torch
+import os
 
 
 def get_model_size(model: torch.nn.Module, location: str = "RAM") -> float:
@@ -16,9 +17,10 @@ def get_model_size(model: torch.nn.Module, location: str = "RAM") -> float:
         total_size = param_size + buffer_size  # in bytes
         return total_size / (1024**2)  # Convert to MB
     elif location == "DISK":
-        bio = io.BytesIO()
-        torch.save(model.state_dict(), bio)
-        return bio.tell() / (1024**2)
+        torch.save(model.state_dict(), "temp.p")
+        size_mb_full = os.path.getsize("temp.p") / 1e6
+        os.remove("temp.p")
+        return size_mb_full
     else:
         raise ValueError("location must be either 'RAM' or 'DISK'")
 
