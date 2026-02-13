@@ -7,7 +7,7 @@ from aac_datasets.utils.collate import BasicCollate
 import json
 import argparse
 from time import perf_counter
-from utils import get_model_size, load_model, get_model_params
+from utils import get_model_size, get_model_params, prepare_models
 import config
 import datetime
 import os
@@ -63,22 +63,6 @@ def prepare_dataloader(verbose):
     collate = BasicCollate()
     loader = DataLoader(ds, batch_size=1, collate_fn=collate)
     return loader
-
-
-def prepare_models(loader: DataLoader):
-    # Load models
-    models_to_eval = []
-    if config.baseline:
-        models_to_eval.append({"model": load_model(), "name": "baseline"})
-    if config.quantization:
-        models_to_eval.append(
-            {"model": load_model(quantized=True, loader=loader), "name": "quantized"}
-        )
-    if config.pruning:
-        models_to_eval.append({"model": load_model(pruned=True), "name": "pruned"})
-    if config.kd:
-        models_to_eval.append({"model": load_model(kd=True), "name": "kd"})
-    return models_to_eval
 
 
 def inference(model: CoNeTTEModel, data_loader):

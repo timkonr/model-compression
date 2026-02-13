@@ -2,9 +2,13 @@ import torch
 import os
 
 
-def get_model_size(model: torch.nn.Module, location: str = "RAM") -> float:
+def get_model_size(model: torch.nn.Module, location: str = "DISK") -> float:
     """
     Measure model size in MB.
+    CAUTION: DO NOT USE location="RAM" FOR QUANTIZED MODELS
+    Measuring model size in RAM can be inaccurate due to shared storage of parameters and buffers.
+    Measuring model size on disk is more accurate, but it may not reflect the actual memory usage of the model during inference.
+    Also, quantized parameters are not counted by model.parameters() and model.buffers(), so measuring their size in RAM will not reflect their actual memory usage.
 
     :param model: the model to measure
     :type model: torch.nn.Module
@@ -28,6 +32,10 @@ def get_model_size(model: torch.nn.Module, location: str = "RAM") -> float:
 def get_model_params(model: torch.nn.Module):
     """
     Count the number of parameters in the model.
+    CAUTION: DO NOT USE ON QUANTIZED MODELS
+
+    Quantized parameters are not counted by model.parameters(), so this will not reflect the actual number of parameters in the model.
+    Quantization doesn't change the amount of parameters anyway.
 
     :param model: the model to measure
     :type model: torch.nn.Module
