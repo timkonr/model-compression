@@ -65,14 +65,14 @@ def prepare_dataloader(verbose):
     return loader
 
 
-def prepare_models():
+def prepare_models(loader: DataLoader):
     # Load models
     models_to_eval = []
     if config.baseline:
         models_to_eval.append({"model": load_model(), "name": "baseline"})
     if config.quantization:
         models_to_eval.append(
-            {"model": load_model(quantized=True), "name": "quantized"}
+            {"model": load_model(quantized=True, loader=loader), "name": "quantized"}
         )
     if config.pruning:
         models_to_eval.append({"model": load_model(pruned=True), "name": "pruned"})
@@ -106,8 +106,8 @@ def inference(model: CoNeTTEModel, data_loader):
 
 
 def perform_inference(verbose, cpu):
-    models_to_eval = prepare_models()
     loader = prepare_dataloader(verbose)
+    models_to_eval = prepare_models(loader)
 
     results = []
 

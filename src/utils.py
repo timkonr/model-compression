@@ -2,54 +2,53 @@ import torch
 from conette import CoNeTTEConfig, CoNeTTEModel
 from prune import prune
 import config
+from quantize import make_quantized_model
 from student_model import load_student_model
+from model_size import get_model_size, get_model_params
 
 
-def load_model(model_path=config.model_folder, quantized=False, pruned=False, kd=False):
+def load_model(
+    model_path=config.model_folder,
+    quantized=False,
+    pruned=False,
+    kd=False,
+    loader=None,
+    verbose=True,
+):
     print("loading model")
     baseline_path = model_path + "baseline/"
     model = CoNeTTEModel.from_pretrained(
         baseline_path, config=CoNeTTEConfig.from_pretrained(baseline_path)
     )
+    model.to("cpu")
+    if verbose:
+        print(
+            f"Original model size on RAM: {get_model_size(model, location='RAM'):.2f} MB"
+        )
+        print(
+            f"Original model size on disk: {get_model_size(model, location='DISK'):.2f} MB"
+        )
+        print(f"Original model params: {get_model_params(model)}")
     if kd:
         model = load_student_model()
     if quantized:
-        # GPU quantization doesn't work atm, because it is still in alpha or beta for pytorch
-        # i.e. it actually would work, but only for a fixed input shape,
-        # which would require us to define a specific length for the input audio files and adapt the preprocesser in the process
-        # so I think this is beyond the scope of this thesis
-        model.to("cpu")
-        model = torch.quantization.quantize_dynamic(
-            model, {torch.nn.Linear}, dtype=torch.qint8
+        model = make_quantized_model(
+            model, quantization_mode=config.quantization_mode, loader=loader
         )
-        model.to("cpu")
     if pruned:
-        print(f"Initial model size: {get_model_size(model)}")
-        print(f"Initial model params: {get_model_params(model)}")
         model = prune(model, keep_ratio=0.5)
-        print(f"Pruned model size: {get_model_size(model)}")
-        print(f"Pruned model params: {get_model_params(model)}")
-        # apply_global_unstructured_pruning(model)
+    model.to("cpu")  # ensure model is on CPU
+    if verbose:
+        new_model_type = (
+            "Pruned and quantized"
+            if quantized and pruned
+            else "Pruned" if pruned else "Quantized" if quantized else "original"
+        )
+        print(
+            f"{new_model_type} model size on RAM: {get_model_size(model, location='RAM'):.2f} MB"
+        )
+        print(
+            f"{new_model_type} model size on disk: {get_model_size(model, location='DISK'):.2f} MB"
+        )
+        print(f"{new_model_type} model params: {get_model_params(model)}")
     return model
-
-
-def get_model_size(model: torch.nn.Module):
-    param_size = sum(p.numel() * p.element_size() for p in model.parameters())
-    buffer_size = sum(b.numel() * b.element_size() for b in model.buffers())
-    total_size = param_size + buffer_size  # in bytes
-    return total_size / (1024**2)  # Convert to MB
-
-
-def get_model_params(model: torch.nn.Module):
-    return sum(p.numel() for p in model.parameters())
-
-
-def check_sparsity(model: torch.nn.Module):
-    total_params = 0
-    zero_params = 0
-    for name, param in model.named_parameters():
-        total_params += param.numel()
-        zero_params += (param == 0).sum().item()
-    print(f"Total parameters: {total_params}")
-    print(f"Zero parameters: {zero_params}")
-    print(f"Sparsity: {zero_params / total_params:.2%}")

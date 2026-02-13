@@ -194,12 +194,10 @@ def prune_old(model, fine_tune=True):
 def prune(model: nn.Module, keep_ratio: float = 0.5, verbose: bool = True):
     """
     Structured pruning: shrink FFN hidden dim in every decoder layer by keeping top-k neurons.
-    Assumes each layer has .linear1 (d_ff x d_model) and .linear2 (d_model x d_ff).
     keep_ratio=0.5 means 2048 -> 1024.
     """
     model.eval()
 
-    # Path in your model: model.model.decoder.layers.<i>.linear1 / linear2
     dec = model.model.decoder
     layers = dec.layers
 
@@ -220,10 +218,9 @@ def prune(model: nn.Module, keep_ratio: float = 0.5, verbose: bool = True):
         k = max(1, min(k, d_ff))
 
         # Importance score per FFN neuron (row of fc1)
-        # You can also try (fc1.weight.abs().mean(dim=1)) – L2 usually works fine
-        scores = fc1.weight.norm(p=2, dim=1)  # (d_ff,)
+        scores = fc1.weight.norm(p=2, dim=1)
         keep_idx = torch.topk(scores, k=k, largest=True).indices
-        keep_idx, _ = torch.sort(keep_idx)  # stable order
+        keep_idx, _ = torch.sort(keep_idx)
 
         # Create new smaller linears
         new_fc1 = nn.Linear(d_model, k, bias=(fc1.bias is not None))
@@ -242,8 +239,5 @@ def prune(model: nn.Module, keep_ratio: float = 0.5, verbose: bool = True):
         # Replace modules in-place
         layer.linear1 = new_fc1
         layer.linear2 = new_fc2
-
-        if verbose:
-            print(f"Decoder layer {li}: d_ff {d_ff} -> {k}")
 
     return model
