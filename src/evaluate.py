@@ -7,8 +7,8 @@ from aac_datasets.utils.collate import BasicCollate
 import json
 import argparse
 from time import perf_counter
-from utils import get_model_size, get_model_params, prepare_models
-import config
+from utils.utils import get_model_size, get_model_params, prepare_models
+from utils import config
 import datetime
 import os
 

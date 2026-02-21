@@ -2,7 +2,7 @@ from torch import qint8, tensor
 from torch.nn import Linear
 from torch.quantization import quantize_dynamic
 from conette import CoNeTTEConfig, CoNeTTEModel
-from utils import load_model, get_model_size
+from utils.utils import load_model, get_model_size
 
 path = "data/CLOTHO_v2.1/clotho_audio_files/evaluation/"
 

@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from conette import CoNeTTEModel, CoNeTTEConfig
 from torchvision.models import efficientnet_b2, EfficientNet_B2_Weights
 from torchvision.models.feature_extraction import create_feature_extractor
-import config
+from utils import config
 
 
 # ------------------------------------------------------------------

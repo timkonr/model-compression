@@ -14,7 +14,7 @@ from aac_datasets import Clotho
 from aac_datasets.utils.collate import BasicCollate
 from aac_metrics import evaluate
 
-import config
+import utils.config as config
 from student_model import (
     extract_proj,
     EfficientNetB2AudioEncoder,

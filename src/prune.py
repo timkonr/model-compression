@@ -8,7 +8,7 @@ from aac_datasets.utils.collate import BasicCollate
 import torch_pruning as tp
 from typing import Any, Iterable, Optional, Union
 from torch import Tensor, Size
-import config
+import utils.config as config
 
 
 class WrappedModel(torch.nn.Module):

@@ -2,7 +2,7 @@ from conette import CoNeTTEConfig, CoNeTTEModel
 from aac_datasets import Clotho, AudioCaps
 import os
 import torchaudio
-import config
+import utils.config as config
 
 
 def main():
