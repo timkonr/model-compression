@@ -46,13 +46,6 @@ def load_model(
         model = make_quantized_model(
             model, quantization_mode=config.quantization_mode, loader=loader
         )
-        for name, m in model.named_modules():
-            cls = m.__class__
-            if cls.__name__ in {
-                "Linear",
-                "NonDynamicallyQuantizableLinear",
-            }:
-                print(name, "->", cls.__module__ + "." + cls.__name__)
     if pruned:
         model = prune(model, keep_ratio=0.5)
     model.to("cpu")  # ensure model is on CPU
