@@ -158,7 +158,10 @@ def perform_evaluation(inference_results):
             mult_references=references,
             metrics=config.metrics,
         )
-        results = {key: value.item() for key, value in corpus_scores.items()}
+        results = {
+            key: value.item() if hasattr(value, "item") else value
+            for key, value in corpus_scores.items()
+        }
 
         r["evaluation_results"] = results
         eval_results.append(r)
