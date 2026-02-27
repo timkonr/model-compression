@@ -49,7 +49,7 @@ def prepare_dataloader(verbose):
     if config.dataset == "clotho":
         ds = Clotho(config.data_folder, subset="eval")
     elif config.dataset == "audiocaps":
-        ds = AudioCaps(config.data_folder, subset="val")
+        ds = AudioCaps(config.data_folder, subset="test")
     else:
         raise ValueError(f"Unsupported dataset: {config.dataset}")
 
@@ -78,6 +78,8 @@ def inference(model: CoNeTTEModel, data_loader):
 
             # Process audio through model
             outputs = model(audio, sr, task="clotho")
+            if i < 1:
+                print("model output:", outputs)
             candidates = outputs["cands"]
 
             # Collect predictions and references

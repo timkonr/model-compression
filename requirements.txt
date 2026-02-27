@@ -1,4 +1,4 @@
-aac-datasets~=0.5.0
+aac-datasets~=0.7.0
 aac-metrics~=0.5.3
 black~=24.2.0
 conette~=0.1.4
@@ -6,7 +6,7 @@ numpy~=1.26
 yt-dlp~=2025.2.19
 transformers==4.39.3
 --extra-index-url https://download.pytorch.org/whl/cu118
-torch==2.2.1
-torchvision==0.17.1+cu118
-torchaudio==2.2.1+cu118
+torch==2.2.2+cu118
+torchvision==0.17.2+cu118
+torchaudio==2.2.2+cu118
 torch-pruning==1.5.1

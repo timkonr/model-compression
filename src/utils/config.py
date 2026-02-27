@@ -1,15 +1,21 @@
-dataset = "clotho"  # clotho | audiocaps
-download_audiocaps = False  # used only in prepare script
+# setup config
+download_baseline_model = False
+download_audiocaps = True
 download_clotho = [
-    "eval",
+    # "eval",
 ]  # used only in prepare script. Use dev and val for training, eval for evaluation
+browser = "firefox"  # for downloading audiocaps with yt-dlp, e.g. "chrome" or "edge"
+browser_cookie_path = ""  # optional path to cookies. for more info see https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp
+
+# evaluation config
+dataset = "audiocaps"  # clotho | audiocaps
 metrics = "all"  # see aac_metrics.functional.evaluate
 inference = True
 save_inference_results = True
 evaluation = True
 baseline = False  # Inference on baseline model
 quantization = True  # Inference on quantized model
-quantization_mode = "dynamic" # dynamic | static
+quantization_mode = "dynamic"  # dynamic | static
 pruning = False  # Inference on pruned model
 kd = False  # Inference on saved kd model
 kd_model = "best_student_model.pth"  # Path to kd model
