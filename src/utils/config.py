@@ -1,5 +1,5 @@
 # setup config
-download_baseline_model = False
+download_baseline_model = True
 download_audiocaps = True
 download_clotho = [
     # "eval",

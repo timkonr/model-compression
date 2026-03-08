@@ -29,7 +29,7 @@ def main():
             max_workers=None,
             ytdlp_opts=[
                 "--cookies-from-browser",
-                f"{config.browser}{":" if len(config.browser_cookie_path) > 0 else ""}{config.browser_cookie_path}",
+                f"{config.browser}{':' if len(config.browser_cookie_path) > 0 else ''}{config.browser_cookie_path}",
             ],
         )
 
