@@ -65,25 +65,7 @@ To run evaluations on a model use the command:
 mc-evaluate
 ```
 
-Which model to evaluate (and what metrics to use - TODO) can be managed by adding command line args.
-By default, only the baseline model is evaluated and the metrics used are:
-
-```json
-[
-  "bleu_1",
-  "bleu_2",
-  "bleu_3",
-  "bleu_4",
-  "meteor",
-  "rouge_l",
-  "fense",
-  "spider_fl",
-  "vocab",
-  "bert_score"
-]
-```
-
-Additional info collected is the model size in MB, the device used for inference and the inference time.
+Configuration of the evaluation can be managed in the config.py. At the moment, by default, only the quantized model is evaluated using AudioCaps. Additional info collected is the model size in MB, the device used for inference and the inference time.
 
 ### Visualizations
 
