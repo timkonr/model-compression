@@ -1,5 +1,4 @@
 import torch
-from conette import CoNeTTEModel
 from torch.utils.data import DataLoader
 from aac_metrics import evaluate
 from aac_datasets import Clotho, AudioCaps
@@ -7,7 +6,7 @@ from aac_datasets.utils.collate import BasicCollate
 import json
 import argparse
 from time import perf_counter
-from utils.utils import get_model_size, get_model_params, prepare_models
+from utils.utils import build_samples, get_model_size, get_model_params, prepare_models
 from utils import config
 import datetime
 import os
@@ -65,27 +64,57 @@ def prepare_dataloader(verbose):
     return loader
 
 
-def inference(model: CoNeTTEModel, data_loader):
-    model.eval()
+def inference(model: torch.nn.Module, data_loader):
+    model.eval() if config.baseline_model == "conette" else model.clapcap.eval()
     predictions, references = [], []
 
     print("predicting eval dataset")
+
     start = perf_counter()
-    with torch.no_grad():
-        for i, batch in enumerate(data_loader):
-            audio = batch["audio"]
-            sr = batch["sr"]
+    if config.baseline_model == "clapcap":
+        csv_path = (
+            config.dataset == "clotho"
+            and f"{config.data_folder}/CLOTHO_v2.1/clotho_csv_files/clotho_captions_evaluation.csv"
+            or f"{config.data_folder}/AUDIOCAPS/csv_files_v1/test.csv"
+        )
+        audio_path = (
+            config.dataset == "clotho"
+            and f"{config.data_folder}/CLOTHO_v2.1/clotho_audio_files/evaluation"
+            or f"{config.data_folder}/AUDIOCAPS/audio_32000Hz/test"
+        )
+        samples = build_samples(csv_path)
+        start = perf_counter()
+        filename, captions = next(iter(samples.items()))
+        path = f"{audio_path}/{filename}"
 
-            # Process audio through model
-            outputs = model(audio, sr, task="clotho")
-            if i < 1:
-                print("model output:", outputs)
-            candidates = outputs["cands"]
+        if os.path.exists(path):
+            pred = model.generate_caption([path])
+            predictions.extend(pred)
+            references.append(captions)
+        # for filename, captions in samples.items():
+        #     path = f"{audio_path}/{filename}"
+        #     if os.path.exists(path):
+        #         pred = model.generate_caption([path])
+        #         predictions.extend(pred)
+        #         references.extend(captions)
+    else:
+        with torch.no_grad():
+            for i, batch in enumerate(data_loader):
+                audio = batch["audio"]
+                sr = batch["sr"]
+                # Process audio through model
+                outputs = (
+                    model(audio, sr, task="clotho")
+                    if config.baseline_model == "conette"
+                    else model(audio)
+                )
+                if i < 1:
+                    print("model output:", outputs)
+                candidates = outputs["cands"]
 
-            # Collect predictions and references
-            predictions.extend(candidates)
-            references.extend(batch["captions"])
-
+                # Collect predictions and references
+                predictions.extend(candidates)
+                references.extend(batch["captions"])
     end = perf_counter()
     inference_time = end - start
     return predictions, references, inference_time
@@ -94,14 +123,18 @@ def inference(model: CoNeTTEModel, data_loader):
 def perform_inference(verbose, cpu):
     loader = prepare_dataloader(verbose)
     models_to_eval = prepare_models(loader)
-
     results = []
 
     for model in models_to_eval:
-        if cpu:
-            model["model"].to("cpu")
-        model_size_mb = get_model_size(model["model"])
-        model_params = get_model_params(model["model"])
+        #        if cpu:
+        #            model["model"].to("cpu")
+        torch_model = (
+            model["model"]
+            if config.baseline_model == "conette"
+            else model["model"].clapcap
+        )
+        model_size_mb = get_model_size(torch_model)
+        model_params = get_model_params(torch_model)
         print(
             f"starting inference on model {model['name']}, model size: {model_size_mb}"
         )
@@ -109,9 +142,10 @@ def perform_inference(verbose, cpu):
         predictions, references, inference_time = inference(
             model["model"], data_loader=loader
         )
-        device = str(next(model["model"].parameters()).device)
+        device = str(next(torch_model.parameters()).device)
         metadata = {
-            "model_name": model["name"],
+            "model": config.baseline_model,
+            "compression_technique": model["name"],
             "model_size_mb": model_size_mb,
             "parameters": model_params,
             "device": device,
@@ -145,14 +179,14 @@ def save_inference_results(inference_results):
     for r in inference_results:
         save_results(
             r,
-            f"results/inference_results_{r['model_name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
+            f"results/inference_results_{r['compression_technique']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
         )
 
 
 def perform_evaluation(inference_results):
     eval_results = []
     for r in inference_results:
-        print(f"running evaluation on model {r['model_name']}")
+        print(f"running evaluation on {r['model']} {r['compression_technique']}")
         predictions = r.pop("predictions")
         references = r.pop("references")
         corpus_scores, _ = evaluate(
@@ -175,7 +209,7 @@ def save_eval_results(eval_results):
     for r in eval_results:
         save_results(
             r,
-            f"results/eval_results_{r['device']}_{r['model_name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
+            f"results/eval_results_{r['device']}_{r['compression_technique']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
         )
 
 

@@ -5,6 +5,7 @@ from model_size import (
     count_qlinear_weight_bias_elems,
     get_model_params,
 )
+from utils import config
 
 
 def make_quantized_model(
@@ -14,14 +15,17 @@ def make_quantized_model(
     # i.e. it works only for a fixed input shape,
     # which would require us to define a specific length for the input audio files and adapt the preprocessor in the process
     if quantization_mode == "dynamic":
-        m = model.eval().to("cpu")
+        m = model if config.baseline_model == "conette" else model.clapcap
+        m = m.eval().to("cpu")
         total_params = get_model_params(m)
-        m = torch.quantization.quantize_dynamic(m, {torch.nn.Linear}, dtype=dtype)
+        m = torch.quantization.quantize_dynamic(
+            m, {torch.nn.Linear}, dtype=dtype, inplace=True
+        )
         [w, b] = count_qlinear_weight_bias_elems(m)
         print(
             f"Quantized layers have {w} quantized weight elements and {b} bias elements and {total_params - w - b} non-quantized parameters"
         )
-        return m
+        return model
     else:
         return make_static_quantized_model(model, loader=loader)
 

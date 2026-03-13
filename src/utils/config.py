@@ -8,6 +8,7 @@ browser = "firefox"  # for downloading audiocaps with yt-dlp, e.g. "chrome" or "
 browser_cookie_path = ""  # optional path to cookies. for more info see https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp
 
 # evaluation config
+baseline_model = "clapcap"  # clapcap | conette
 dataset = "audiocaps"  # clotho | audiocaps
 metrics = "all"  # see aac_metrics.functional.evaluate
 inference = True
