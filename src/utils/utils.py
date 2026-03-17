@@ -84,7 +84,7 @@ def build_samples(csv_path):
         reader = csv.DictReader(f)
         for row in reader:
             if config.dataset == "clotho":
-                filename = row["filename"]
+                filename = row["file_name"]
                 sample = [
                     row["caption_1"],
                     row["caption_2"],
