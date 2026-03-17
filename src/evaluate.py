@@ -91,12 +91,7 @@ def inference(model: torch.nn.Module, data_loader):
             pred = model.generate_caption([path])
             predictions.extend(pred)
             references.append(captions)
-        # for filename, captions in samples.items():
-        #     path = f"{audio_path}/{filename}"
-        #     if os.path.exists(path):
-        #         pred = model.generate_caption([path])
-        #         predictions.extend(pred)
-        #         references.extend(captions)
+
     else:
         with torch.no_grad():
             for i, batch in enumerate(data_loader):
@@ -126,8 +121,6 @@ def perform_inference(verbose, cpu):
     results = []
 
     for model in models_to_eval:
-        #        if cpu:
-        #            model["model"].to("cpu")
         torch_model = (
             model["model"]
             if config.baseline_model == "conette"
@@ -179,7 +172,7 @@ def save_inference_results(inference_results):
     for r in inference_results:
         save_results(
             r,
-            f"results/inference_results_{r['compression_technique']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
+            f"results/inference_results_{r['compression_technique']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json",
         )
 
 
@@ -209,7 +202,7 @@ def save_eval_results(eval_results):
     for r in eval_results:
         save_results(
             r,
-            f"results/eval_results_{r['device']}_{r['compression_technique']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}",
+            f"results/eval_results_{r['device']}_{r['compression_technique']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json",
         )
 
 

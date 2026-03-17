@@ -67,6 +67,12 @@ mc-evaluate
 
 Configuration of the evaluation can be managed in the config.py. At the moment, by default, only the quantized model is evaluated using AudioCaps. Additional info collected is the model size in MB, the device used for inference and the inference time.
 
+### Results
+
+After successful inference of the dataset by the selected models, a JSON file is saved in the results folder called `inference_results_{compression_technique}_{timestamp}.json`. It includes the model and compression technique used, model size in MB, the amount of unquantized parameters, wether the device used was GPU or CPU, total inference time  in seconds, the generated captions and its corresponding baseline references.
+
+Next, selected metrics are calculated using the generated and baseline captions and saved together with the above mentioned metadata as `eval_results_{device}_{baseline/quantized}_{timestamp}.json`.
+
 ### Visualizations
 
 TODO

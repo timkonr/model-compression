@@ -23,6 +23,7 @@ kd_model = "best_student_model.pth"  # Path to kd model
 data_folder = "data/"  # Path to data folder
 model_folder = "model/"  # Path to model folder
 
+# kd config
 patience = 5
 num_epochs = 25
 batch_size = 32
