@@ -144,7 +144,7 @@ def perform_inference(verbose, cpu):
             "model": config.baseline_model,
             "compression_technique": model["name"],
             "model_size_mb": model_size_mb,
-            "parameters": model_params,
+            "unquantized_parameters": model_params,
             "device": device,
             "inference_time_in_s": f"{inference_time:.3f}",
             "predictions": predictions,
