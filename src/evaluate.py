@@ -147,6 +147,7 @@ def perform_inference(verbose, cpu):
             "unquantized_parameters": model_params,
             "device": device,
             "inference_time_in_s": f"{inference_time:.3f}",
+            "dataset": config.dataset,
             "predictions": predictions,
             "references": references,
         }
