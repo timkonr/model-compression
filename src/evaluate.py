@@ -84,13 +84,17 @@ def inference(model: torch.nn.Module, data_loader):
         )
         samples = build_samples(csv_path)
         start = perf_counter()
-        filename, captions = next(iter(samples.items()))
-        path = f"{audio_path}/{filename}"
-
-        if os.path.exists(path):
-            pred = model.generate_caption([path])
-            predictions.extend(pred)
-            references.append(captions)
+        # Test with only two samples
+        # i = 0
+        for filename, captions in samples.items():
+            # if i > 1:
+            #     break
+            path = f"{audio_path}/{filename}"
+            if os.path.exists(path):
+                pred = model.generate_caption([path])
+                predictions.extend(pred)
+                references.append(captions)
+                # i = i + 1
 
     else:
         with torch.no_grad():
