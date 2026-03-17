@@ -10,7 +10,12 @@ browser_cookie_path = ""  # optional path to cookies. for more info see https://
 # evaluation config
 baseline_model = "clapcap"  # clapcap | conette
 dataset = "audiocaps"  # clotho | audiocaps
-metrics = "all"  # see aac_metrics.functional.evaluate
+metrics = (
+    "meteor",
+    "spider",
+    "fense",
+    "vocab",
+)
 inference = True
 save_inference_results = True
 evaluation = True
