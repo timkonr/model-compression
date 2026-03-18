@@ -71,42 +71,38 @@ def inference(model: torch.nn.Module, data_loader):
     print("predicting eval dataset")
 
     start = perf_counter()
-    if config.baseline_model == "clapcap":
-        csv_path = (
-            config.dataset == "clotho"
-            and f"{config.data_folder}/CLOTHO_v2.1/clotho_csv_files/clotho_captions_evaluation.csv"
-            or f"{config.data_folder}/AUDIOCAPS/csv_files_v1/test.csv"
-        )
-        audio_path = (
-            config.dataset == "clotho"
-            and f"{config.data_folder}/CLOTHO_v2.1/clotho_audio_files/evaluation"
-            or f"{config.data_folder}/AUDIOCAPS/audio_32000Hz/test"
-        )
-        samples = build_samples(csv_path)
-        start = perf_counter()
-        # Test with only two samples
-        # i = 0
-        for filename, captions in samples.items():
-            # if i > 1:
-            #     break
-            path = f"{audio_path}/{filename}"
-            if os.path.exists(path):
-                pred = model.generate_caption([path])
-                predictions.extend(pred)
-                references.append(captions)
-                # i = i + 1
+    with torch.no_grad():
+        if config.baseline_model == "clapcap":
+            csv_path = (
+                config.dataset == "clotho"
+                and f"{config.data_folder}/CLOTHO_v2.1/clotho_csv_files/clotho_captions_evaluation.csv"
+                or f"{config.data_folder}/AUDIOCAPS/csv_files_v1/test.csv"
+            )
+            audio_path = (
+                config.dataset == "clotho"
+                and f"{config.data_folder}/CLOTHO_v2.1/clotho_audio_files/evaluation"
+                or f"{config.data_folder}/AUDIOCAPS/audio_32000Hz/test"
+            )
+            samples = build_samples(csv_path)
+            start = perf_counter()
+            # Test with only two samples
+            # i = 0
+            for filename, captions in samples.items():
+                # if i > 1:
+                #     break
+                path = f"{audio_path}/{filename}"
+                if os.path.exists(path):
+                    pred = model.generate_caption([path])
+                    predictions.extend(pred)
+                    references.append(captions)
+                    # i = i + 1
 
-    else:
-        with torch.no_grad():
+        elif config.baseline_model == "conette":
             for i, batch in enumerate(data_loader):
                 audio = batch["audio"]
                 sr = batch["sr"]
                 # Process audio through model
-                outputs = (
-                    model(audio, sr, task="clotho")
-                    if config.baseline_model == "conette"
-                    else model(audio)
-                )
+                outputs = model(audio, sr, task="clotho")  # TODO task based on dataset
                 if i < 1:
                     print("model output:", outputs)
                 candidates = outputs["cands"]
@@ -114,9 +110,9 @@ def inference(model: torch.nn.Module, data_loader):
                 # Collect predictions and references
                 predictions.extend(candidates)
                 references.extend(batch["captions"])
-    end = perf_counter()
-    inference_time = end - start
-    return predictions, references, inference_time
+        end = perf_counter()
+        inference_time = end - start
+        return predictions, references, inference_time
 
 
 def perform_inference(verbose, cpu):
