@@ -102,7 +102,7 @@ def inference(model: torch.nn.Module, data_loader):
                 audio = batch["audio"]
                 sr = batch["sr"]
                 # Process audio through model
-                outputs = model(audio, sr, task="clotho")  # TODO task based on dataset
+                outputs = model(audio, sr, task=config.dataset)
                 if i < 1:
                     print("model output:", outputs)
                 candidates = outputs["cands"]
