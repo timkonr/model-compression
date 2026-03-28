@@ -54,7 +54,12 @@ def prepare_dataloader(verbose):
     if config.dataset == "clotho":
         ds = Clotho(config.data_folder, subset="eval")
     elif config.dataset == "audiocaps":
-        ds = AudioCaps(config.data_folder, subset="test")
+        ds = AudioCaps(
+            config.data_folder,
+            subset="test",
+            audio_format="wav",
+            sr=22050,
+        )
     else:
         raise ValueError(f"Unsupported dataset: {config.dataset}")
 
@@ -87,7 +92,7 @@ def inference(model: torch.nn.Module, data_loader):
             audio_path = (
                 config.dataset == "clotho"
                 and f"{config.data_folder}/CLOTHO_v2.1/clotho_audio_files/evaluation"
-                or f"{config.data_folder}/AUDIOCAPS/audio_32000Hz/test"
+                or f"{config.data_folder}/AUDIOCAPS/audio22050Hz/test"
             )
             samples = build_samples(csv_path)
             start = perf_counter()

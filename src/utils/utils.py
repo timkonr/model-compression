@@ -112,7 +112,7 @@ def build_samples(csv_path):
                 ]
                 samples_dict[filename] = sample
             elif config.dataset == "audiocaps":
-                filename = f"{row['youtube_id']}_{row['start_time']}.flac"
+                filename = f"{row['youtube_id']}_{row['start_time']}.wav"
                 if filename in samples_dict:
                     samples_dict[filename].append(row["caption"])
                 else:

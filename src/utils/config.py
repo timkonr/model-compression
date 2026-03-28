@@ -1,9 +1,7 @@
 # setup config
 download_baseline_model = True
-download_audiocaps = True
-download_clotho = [
-    # "eval",
-]  # used only in prepare script. Use dev and val for training, eval for evaluation
+download_audiocaps = ["test"]  # add train and val for training
+download_clotho = ["eval"]  # add dev and val for training
 browser = "firefox"  # for downloading audiocaps with yt-dlp, e.g. "chrome" or "edge"
 browser_cookie_path = ""  # optional path to cookies. for more info see https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp
 

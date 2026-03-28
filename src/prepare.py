@@ -20,18 +20,22 @@ def main():
             Clotho(config.data_folder, subset="val", download=True)
         if "dev" in config.download_clotho:
             Clotho(config.data_folder, subset="dev", download=True)
-    if config.download_audiocaps:
-        AudioCaps(
-            config.data_folder,
-            subset="test",
-            download=True,
-            verify_files=True,
-            max_workers=None,
-            ytdlp_opts=[
-                "--cookies-from-browser",
-                f"{config.browser}{':' if len(config.browser_cookie_path) > 0 else ''}{config.browser_cookie_path}",
-            ],
-        )
+    if len(config.download_audiocaps) > 0:
+        [
+            AudioCaps(
+                config.data_folder,
+                subset=subset,
+                download=True,
+                verify_files=True,
+                max_workers=None,
+                ytdlp_opts=[
+                    "--cookies-from-browser",
+                    f"{config.browser}{':' if len(config.browser_cookie_path) > 0 else ''}{config.browser_cookie_path}",
+                ],
+                audio_format="wav",
+            )
+            for subset in config.download_audiocaps
+        ]
 
 
 if __name__ == "__main__":
