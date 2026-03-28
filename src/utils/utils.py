@@ -1,5 +1,6 @@
 from conette import CoNeTTEConfig, CoNeTTEModel
-from finetune import finetune_conette
+
+# from finetune import finetune_conette
 from prune import prune_clapcap, prune_conette
 from utils import config
 from quantize import make_quantized_model
