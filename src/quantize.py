@@ -16,11 +16,19 @@ def make_quantized_model(
     # which would require us to define a specific length for the input audio files and adapt the preprocessor in the process
     if quantization_mode == "dynamic":
         m = model if config.baseline_model == "conette" else model.clapcap
-        m = m.eval().to("cpu")
         total_params = get_model_params(m)
-        m = torch.quantization.quantize_dynamic(
-            m, {torch.nn.Linear}, dtype=dtype, inplace=True
-        )
+        if config.baseline_model == "conette":
+            m = torch.quantization.quantize_dynamic(
+                m, {torch.nn.Linear}, dtype=dtype, inplace=True
+            )
+        elif config.baseline_model == "clapcap":
+            # for clapcap we only quantize the encoder (m.clap) and the CLAP projection (m.clap_project)
+            torch.quantization.quantize_dynamic(
+                m.clap, {torch.nn.Linear}, dtype=dtype, inplace=True
+            )
+            torch.quantization.quantize_dynamic(
+                m.clap_project, {torch.nn.Linear}, dtype=dtype, inplace=True
+            )
         [w, b] = count_qlinear_weight_bias_elems(m)
         print(
             f"Quantized layers have {w} quantized weight elements and {b} bias elements and {total_params - w - b} non-quantized parameters"

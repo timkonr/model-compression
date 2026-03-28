@@ -1,243 +1,342 @@
 import torch
 import torch.nn as nn
-from pruner import ModelPruner
-from train import train
-from aac_datasets import Clotho
-from torch.utils.data import DataLoader
-from aac_datasets.utils.collate import BasicCollate
-import torch_pruning as tp
-from typing import Any, Iterable, Optional, Union
-from torch import Tensor, Size
+from typing import Optional
 import utils.config as config
+from transformers.pytorch_utils import Conv1D
 
 
-class WrappedModel(torch.nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
+def compute_linear_hidden_scores(
+    first: nn.Linear,
+    second: nn.Linear,
+    mode: str = "sum_l2",
+) -> torch.Tensor:
+    """
+    Compute one importance score per hidden neuron.
 
-    def forward(
-        self,
-        # Inputs
-        x: Union[Tensor, str, Iterable[str], Iterable[Tensor]],
-        sr: Union[None, int, Iterable[int]] = None,
-        x_shapes: Union[Tensor, None, list[Size]] = None,
-        # Beam search options
-        task: Union[str, list[str], None] = None,
-        beam_size: Optional[int] = None,
-        min_pred_size: Optional[int] = None,
-        max_pred_size: Optional[int] = None,
-        forbid_rep_mode: Optional[str] = None,
-    ) -> dict[str, Any]:
-        output = self.model(
-            x=x,
-            sr=sr,
-            x_shapes=x_shapes,
-            task=task,
-            beam_size=beam_size,
-            min_pred_size=min_pred_size,
-            max_pred_size=max_pred_size,
-            forbid_rep_mode=forbid_rep_mode,
-        )
-        return torch.as_tensor(output)  # , output
+    first:  Linear(in_features, hidden_dim)
+    second: Linear(hidden_dim, out_features)
 
-    def __call__(
-        self,
-        # Inputs
-        x: Union[Tensor, str, Iterable[str], Iterable[Tensor]],
-        sr: Union[None, int, Iterable[int]] = None,
-        x_shapes: Union[Tensor, None, list[Size]] = None,
-        # Beam search options
-        task: Union[str, list[str], None] = None,
-        beam_size: Optional[int] = None,
-        min_pred_size: Optional[int] = None,
-        max_pred_size: Optional[int] = None,
-        forbid_rep_mode: Optional[str] = None,
-    ) -> dict[str, Any]:
-        return super().__call__(
-            x=x,
-            sr=sr,
-            x_shapes=x_shapes,
-            task=task,
-            beam_size=beam_size,
-            min_pred_size=min_pred_size,
-            max_pred_size=max_pred_size,
-            forbid_rep_mode=forbid_rep_mode,
-        )
+    Shapes:
+      first.weight  = (hidden_dim, in_features)
+      second.weight = (out_features, hidden_dim)
+    """
+    if mode == "first_l2":
+        # importance = incoming magnitude
+        return first.weight.norm(p=2, dim=1)
 
+    if mode == "sum_l2":
+        # importance = incoming magnitude + outgoing magnitude
+        in_score = first.weight.norm(p=2, dim=1)  # (hidden_dim,)
+        out_score = second.weight.norm(p=2, dim=0)  # (hidden_dim,)
+        return in_score + out_score
 
-def use_torch_pruning(model: torch.nn.Module):
-    loader = DataLoader(
-        Clotho(config.data_folder, subset="eval"),
-        batch_size=1,
-        collate_fn=BasicCollate(),
-    )
-    for batch in loader:
-        audio = batch["audio"]
-        sr = batch["sr"]
-        break
-
-    imp = tp.importance.MagnitudeImportance(p=2)
-    ignored_layers = []
-    for m in model.modules():
-        if isinstance(m, torch.nn.Linear) and m.out_features == 19788:
-            ignored_layers.append(m)  # DO NOT prune the final classifier!
-
-    iterative_steps = 5  # progressive pruning
-    # model.config.use_cache = False
-    if isinstance(audio, list):  # Convert list to tensor
-        audio = torch.stack(audio)
-    print(f"audio type: {type(audio)}, shape: {audio.shape}")
-    output = model(audio)
-    print(f"Output type: {type(output)}, output: {output}")
-
-    wrapped_model = WrappedModel(model)
-
-    pruner = tp.pruner.MagnitudePruner(
-        wrapped_model,
-        example_inputs=audio,
-        importance=imp,
-        iterative_steps=iterative_steps,
-        pruning_ratio=0.2,  # remove 50% channels, ResNet18 = {64, 128, 256, 512} => ResNet18_Half = {32, 64, 128, 256}
-        ignored_layers=ignored_layers,
-        round_to=8,
-    )
-    base_macs, base_nparams = tp.utils.count_ops_and_params(wrapped_model, audio)
-    # tp.utils.print_tool.before_pruning(wrapped_model)  # or print(model)
-    wrapped_model.eval()
-    for i in range(iterative_steps):
-        pruner.step()
-        # print(wrapped_model)
-        # tp.utils.print_tool.after_pruning(wrapped_model)  # or print(model)
-        macs, nparams = tp.utils.count_ops_and_params(wrapped_model, audio)
-        print(f"MACs reduced from {base_macs} to {macs}")
-        print(f"Params reduced from {base_nparams} to {nparams}")
-    return wrapped_model  # , pruner, macs, nparams, audio, output
-
-    # for i in range(iterative_steps):
-    #     if isinstance(imp, tp.importance.TaylorImportance):
-    #         # Taylor expansion requires gradients for importance estimation
-    #         loss = model(audio)["preds"].sum()  # a dummy loss for TaylorImportance
-    #         loss.backward()  # before pruner.step()
-    #     pruner.step()
-    #     macs, nparams = tp.utils.count_ops_and_params(model, audio)
-
-    # fine tuning
-
-
-def apply_structured_pruning(model: torch.nn.Module):
-    # For structured pruning (removing entire channels/neurons)
-    # Let's say we want to prune the least important 2 channels in conv layers
-    for name, module in model.named_modules():
-        if isinstance(module, torch.nn.Conv2d):
-            tp.ln_structured(
-                module, name="weight", amount=0.2, n=2, dim=0
-            )  # Prune 2 output channels
-    return model
-
-
-def apply_unstructured_pruning(
-    model: torch.nn.Module, pruning_percentage=0.3, prune_biases=False
-):
-    for name, module in model.named_modules():
-        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
-            prune.l1_unstructured(module, name="weight", amount=pruning_percentage)
-            if prune_biases:
-                prune.l1_unstructured(module, name="bias", amount=pruning_percentage)
-    return model
-
-
-def apply_global_unstructured_pruning(
-    model: torch.nn.Module, pruning_percentage=0.2, prune_biases=False
-):
-    parameters_to_prune = []
-
-    # Collect all layers to be pruned
-    for name, module in model.named_modules():
-        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
-            parameters_to_prune.append((module, "weight"))
-            if prune_biases:
-                parameters_to_prune.append((module, "bias"))
-
-    # Apply global pruning
-    prune.global_unstructured(
-        parameters_to_prune,
-        pruning_method=prune.L1Unstructured,  # Magnitude-based pruning
-        amount=pruning_percentage,  # Proportion of weights to prune
-    )
-
-    for name, module in model.named_modules():
-        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
-            prune.remove(module, "weight")
-            if prune_biases:
-                prune.remove(module, "bias")
-
-    return model
-
-
-def prune_old(model, fine_tune=True):
-    pruner = ModelPruner(model, prune_ratio=0.2)
-    model = pruner.prune_model()
-    if fine_tune:
-        print("fine tuning pruned model")
-        train_ds = Clotho(config.data_folder, subset="dev", download=True)
-        val_ds = Clotho(config.data_folder, subset="val", download=True)
-
-        collate = BasicCollate()
-        train_loader = DataLoader(train_ds, batch_size=32, collate_fn=collate)
-        val_loader = DataLoader(val_ds, batch_size=32, collate_fn=collate)
-        model = train(model, train_loader, val_loader)
-    return model
+    raise ValueError(f"Unsupported score mode: {mode}")
 
 
 @torch.no_grad()
-def prune(model: nn.Module, keep_ratio: float = 0.5, verbose: bool = True):
+def prune_linear_pair(
+    first: nn.Linear,
+    second: nn.Linear,
+    keep_ratio: float,
+    score_mode: str = "sum_l2",
+) -> tuple[nn.Linear, nn.Linear]:
     """
-    Structured pruning: shrink FFN hidden dim in every decoder layer by keeping top-k neurons.
-    keep_ratio=0.5 means 2048 -> 1024.
+    Structured pruning of an MLP pair:
+
+      first : Linear(d_in, d_hidden)
+      second: Linear(d_hidden, d_out)
+
+    Removes hidden neurons consistently in both layers.
+    """
+    d_hidden = first.out_features
+    d_in = first.in_features
+    d_out = second.out_features
+
+    if second.in_features != d_hidden:
+        raise RuntimeError(
+            f"Incompatible pair: first.out={d_hidden}, second.in={second.in_features}"
+        )
+
+    k = int(round(d_hidden * keep_ratio))
+    k = max(1, min(k, d_hidden))
+
+    scores = compute_linear_hidden_scores(first, second, mode=score_mode)
+    keep_idx = torch.topk(scores, k=k, largest=True).indices
+    keep_idx, _ = torch.sort(keep_idx)
+
+    new_first = nn.Linear(d_in, k, bias=(first.bias is not None))
+    new_second = nn.Linear(k, d_out, bias=(second.bias is not None))
+
+    # Copy selected hidden neurons
+    new_first.weight.copy_(first.weight[keep_idx, :])
+    if first.bias is not None:
+        new_first.bias.copy_(first.bias[keep_idx])
+
+    new_second.weight.copy_(second.weight[:, keep_idx])
+    if second.bias is not None:
+        new_second.bias.copy_(second.bias)
+
+    return new_first, new_second
+
+
+@torch.no_grad()
+def prune_conette(
+    model: nn.Module,
+    decoder_keep_ratio: Optional[float] = config.decoder_keep_ratio,
+    convnext_3072_keep_ratio: Optional[float] = config.convnext_3072_keep_ratio,
+    convnext_1536_keep_ratio: Optional[float] = config.convnext_1536_keep_ratio,
+    score_mode: str = config.pruning_score_mode,
+    verbose: bool = True,
+):
+    """
+    Prune CoNeTTE MLP blocks:
+      - decoder: linear1 / linear2
+      - encoder: pwconv1 / pwconv2
+
+    Set a keep_ratio to None to skip that part.
     """
     model.eval()
 
-    dec = model.model.decoder
-    layers = dec.layers
+    # -------------------------
+    # 1) Decoder pruning
+    # -------------------------
+    if decoder_keep_ratio is not None:
+        dec = model.model.decoder
+        for li, layer in enumerate(dec.layers):
+            old_hidden = layer.linear1.out_features
 
-    for li, layer in enumerate(layers):
-        fc1: nn.Linear = layer.linear1
-        fc2: nn.Linear = layer.linear2
-
-        d_ff = fc1.out_features
-        d_model = fc1.in_features
-
-        if fc2.in_features != d_ff or fc2.out_features != d_model:
-            raise RuntimeError(
-                f"Unexpected shapes at layer {li}: "
-                f"linear1 {tuple(fc1.weight.shape)}, linear2 {tuple(fc2.weight.shape)}"
+            new_fc1, new_fc2 = prune_linear_pair(
+                layer.linear1,
+                layer.linear2,
+                keep_ratio=decoder_keep_ratio,
+                score_mode=score_mode,
             )
 
-        k = int(round(d_ff * keep_ratio))
-        k = max(1, min(k, d_ff))
+            layer.linear1 = new_fc1
+            layer.linear2 = new_fc2
 
-        # Importance score per FFN neuron (row of fc1)
-        scores = fc1.weight.norm(p=2, dim=1)
-        keep_idx = torch.topk(scores, k=k, largest=True).indices
-        keep_idx, _ = torch.sort(keep_idx)
+            if verbose:
+                print(
+                    f"[Decoder layer {li}] hidden dim: "
+                    f"{old_hidden} -> {new_fc1.out_features}"
+                )
 
-        # Create new smaller linears
-        new_fc1 = nn.Linear(d_model, k, bias=(fc1.bias is not None))
-        new_fc2 = nn.Linear(k, d_model, bias=(fc2.bias is not None))
+    # -------------------------
+    # 2) Encoder pruning
+    # -------------------------
+    if convnext_3072_keep_ratio is not None or convnext_1536_keep_ratio is not None:
+        block_idx = 0
+        for module in model.preprocessor.encoder.stages.modules():
+            has_mlp = hasattr(module, "pwconv1") and hasattr(module, "pwconv2")
+            if not has_mlp:
+                continue
 
-        # Copy weights/bias
-        new_fc1.weight.copy_(fc1.weight[keep_idx, :])
-        if fc1.bias is not None:
-            new_fc1.bias.copy_(fc1.bias[keep_idx])
+            pw1 = module.pwconv1
+            pw2 = module.pwconv2
 
-        # fc2.weight shape: (d_model, d_ff) -> keep columns
-        new_fc2.weight.copy_(fc2.weight[:, keep_idx])
-        if fc2.bias is not None:
-            new_fc2.bias.copy_(fc2.bias)
+            if not isinstance(pw1, nn.Linear) or not isinstance(pw2, nn.Linear):
+                continue
 
-        # Replace modules in-place
-        layer.linear1 = new_fc1
-        layer.linear2 = new_fc2
+            old_hidden = pw1.out_features
+            if old_hidden == 1536 and convnext_1536_keep_ratio is not None:
+                new_pw1, new_pw2 = prune_linear_pair(
+                    pw1,
+                    pw2,
+                    keep_ratio=convnext_1536_keep_ratio,
+                    score_mode=score_mode,
+                )
+
+                module.pwconv1 = new_pw1
+                module.pwconv2 = new_pw2
+
+                if verbose:
+                    print(
+                        f"[ConvNeXt block {block_idx}] hidden dim: "
+                        f"{old_hidden} -> {new_pw1.out_features}"
+                    )
+            elif old_hidden > 1536 and convnext_3072_keep_ratio is not None:
+                new_pw1, new_pw2 = prune_linear_pair(
+                    pw1,
+                    pw2,
+                    keep_ratio=convnext_3072_keep_ratio,
+                    score_mode=score_mode,
+                )
+
+                module.pwconv1 = new_pw1
+                module.pwconv2 = new_pw2
+
+                if verbose:
+                    print(
+                        f"[ConvNeXt block {block_idx}] hidden dim: "
+                        f"{old_hidden} -> {new_pw1.out_features}"
+                    )
+            block_idx += 1
+
+    return model
+
+
+def compute_conv1d_hidden_scores(
+    first: Conv1D,
+    second: Conv1D,
+    mode: str = "sum_l2",
+) -> torch.Tensor:
+    """
+    first : Conv1D(hidden_dim, in_features)
+    second: Conv1D(out_features, hidden_dim)
+
+    Shapes:
+        first.weight  = (in_features, hidden_dim)
+        second.weight = (hidden_dim, out_features)
+    """
+    if mode == "first_l2":
+        return first.weight.norm(p=2, dim=0)  # columns of first => hidden dim
+
+    if mode == "sum_l2":
+        in_score = first.weight.norm(p=2, dim=0)  # columns of first => hidden dim
+        out_score = second.weight.norm(p=2, dim=1)  # rows of second => hidden dim
+        return in_score + out_score
+
+    raise ValueError(f"Unknown score mode: {mode}")
+
+
+@torch.no_grad()
+def prune_conv1d_pair(
+    first: Conv1D, second: Conv1D, keep_ratio: float, score_mode: str = "sum_l2"
+):
+    d_in, d_hidden = first.weight.shape
+    d_hidden_2, d_out = second.weight.shape
+
+    if d_hidden_2 != d_hidden:
+        raise RuntimeError(
+            f"Incompatible Conv1D pair: first hidden={d_hidden}, second hidden={d_hidden_2}"
+        )
+
+    k = int(round(d_hidden * keep_ratio))
+    k = max(1, min(k, d_hidden))
+
+    scores = compute_conv1d_hidden_scores(first, second, mode=score_mode)
+    keep_idx = torch.topk(scores, k=k, largest=True).indices
+    keep_idx, _ = torch.sort(keep_idx)
+
+    new_first = Conv1D(k, d_in).to(device=first.weight.device, dtype=first.weight.dtype)
+    new_second = Conv1D(d_out, k).to(
+        device=second.weight.device, dtype=second.weight.dtype
+    )
+
+    # first.weight: (in_features, hidden_dim) -> keep hidden columns
+    new_first.weight.copy_(first.weight[:, keep_idx])
+    new_first.bias.copy_(first.bias[keep_idx])
+
+    # second.weight: (hidden_dim, out_features) -> keep hidden rows
+    new_second.weight.copy_(second.weight[keep_idx, :])
+    new_second.bias.copy_(second.bias)
+
+    return new_first, new_second
+
+
+@torch.no_grad()
+def prune_clapcap(
+    model: nn.Module,
+    gpt_keep_ratio: Optional[float] = config.gpt_keep_ratio,
+    mapper_keep_ratio: Optional[float] = config.mapper_keep_ratio,
+    htsat_keep_ratio: Optional[float] = config.htsat_keep_ratio,
+    htsat_min_hidden_dim: int = config.htsat_min_hidden_dim,
+    score_mode: str = "sum_l2",
+    verbose: bool = True,
+) -> nn.Module:
+    """
+    Structured pruning for CLAPCAP on:
+      - GPT2 MLPs        ("Conv1D" pair) -> HuggingFace's Conv1D basically works like a linear layer but the weights are transposed.
+      - Mapper MLPs      (Linear pair)
+      - HTSAT/Swin MLPs  (Linear pair)
+    """
+    model.eval()
+
+    # -------------------------
+    # 1) GPT2 pruning
+    # -------------------------
+    if gpt_keep_ratio is not None:
+        gpt_blocks = model.gpt.transformer.h
+
+        for i, block in enumerate(gpt_blocks):
+            old_hidden = block.mlp.c_fc.weight.shape[1]
+
+            new_c_fc, new_c_proj = prune_conv1d_pair(
+                block.mlp.c_fc,
+                block.mlp.c_proj,
+                keep_ratio=gpt_keep_ratio,
+                score_mode=score_mode,
+            )
+
+            block.mlp.c_fc = new_c_fc
+            block.mlp.c_proj = new_c_proj
+
+            if verbose:
+                print(
+                    f"[GPT2 block {i}] hidden dim: {old_hidden} -> {new_c_fc.weight.shape[1]}"
+                )
+    # -------------------------
+    # 2) Mapper pruning
+    # -------------------------
+    if mapper_keep_ratio is not None:
+        mapper_layers = model.clap_project.transformer.layers
+
+        for i, layer in enumerate(mapper_layers):
+            old_hidden = layer.mlp.fc1.out_features
+
+            new_fc1, new_fc2 = prune_linear_pair(
+                layer.mlp.fc1,
+                layer.mlp.fc2,
+                keep_ratio=mapper_keep_ratio,
+                score_mode=score_mode,
+            )
+
+            layer.mlp.fc1 = new_fc1
+            layer.mlp.fc2 = new_fc2
+
+            if verbose:
+                print(
+                    f"[Mapper layer {i}] hidden dim: {old_hidden} -> {new_fc1.out_features}"
+                )
+
+    # -------------------------
+    # 3) HTSAT / Swin MLP pruning
+    # -------------------------
+    if htsat_keep_ratio is not None:
+        global_block_idx = 0
+
+        for stage_idx, stage in enumerate(model.clap.base.htsat.layers):
+            if not hasattr(stage, "blocks"):
+                continue
+
+            for block_idx, block in enumerate(stage.blocks):
+                current_block_idx = global_block_idx
+                global_block_idx += 1
+                if not hasattr(block, "mlp"):
+                    continue
+
+                fc1 = block.mlp.fc1
+                fc2 = block.mlp.fc2
+
+                if fc1.out_features < htsat_min_hidden_dim:
+                    continue
+
+                old_hidden = fc1.out_features
+
+                new_fc1, new_fc2 = prune_linear_pair(
+                    fc1,
+                    fc2,
+                    keep_ratio=htsat_keep_ratio,
+                    score_mode=score_mode,
+                )
+
+                block.mlp.fc1 = new_fc1
+                block.mlp.fc2 = new_fc2
+
+                if verbose:
+                    print(
+                        f"[HTSAT stage {stage_idx} block {block_idx} | global {current_block_idx}] "
+                        f"hidden dim: {old_hidden} -> {new_fc1.out_features}"
+                    )
 
     return model

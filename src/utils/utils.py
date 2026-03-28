@@ -1,5 +1,6 @@
 from conette import CoNeTTEConfig, CoNeTTEModel
-from prune import prune
+from finetune import finetune_conette
+from prune import prune_clapcap, prune_conette
 from utils import config
 from quantize import make_quantized_model
 from student_model import load_student_model
@@ -23,6 +24,13 @@ def prepare_models(loader: DataLoader):
     if config.kd:
         models_to_eval.append({"model": load_model(kd=True), "name": "kd"})
     return models_to_eval
+
+
+def prepare_multi_compressed_model(loader: DataLoader):
+    return {
+        "model": load_model(quantized=True, pruned=True, loader=loader),
+        "name": "pruned and quantized",
+    }
 
 
 def load_model(
@@ -55,12 +63,22 @@ def load_model(
         )
     if kd:
         model = load_student_model()
+    if pruned:
+        # model = prune(model, keep_ratio=0.5)
+        if config.baseline_model == "conette":
+            model = prune_conette(model, verbose=True)
+            # finetune_conette(
+            #     hf_model=model,
+            #     dataset_name=config.dataset,  # z.B. "audiocaps" oder "clotho"
+            #     num_epochs=1,
+            #     lr=1e-5,
+            # )
+        elif config.baseline_model == "clapcap":
+            model.clapcap = prune_clapcap(model.clapcap, verbose=True)
     if quantized:
         model = make_quantized_model(
             model, quantization_mode=config.quantization_mode, loader=loader
         )
-    if pruned:
-        model = prune(model, keep_ratio=0.5)
     # model.to("cpu")  # ensure model is on CPU
     if verbose:
         new_model_type = (

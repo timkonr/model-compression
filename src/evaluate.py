@@ -6,7 +6,13 @@ from aac_datasets.utils.collate import BasicCollate
 import json
 import argparse
 from time import perf_counter
-from utils.utils import build_samples, get_model_size, get_model_params, prepare_models
+from utils.utils import (
+    build_samples,
+    get_model_size,
+    get_model_params,
+    prepare_models,
+    prepare_multi_compressed_model,
+)
 from utils import config
 import datetime
 import os
@@ -117,9 +123,12 @@ def inference(model: torch.nn.Module, data_loader):
 
 def perform_inference(verbose, cpu):
     loader = prepare_dataloader(verbose)
-    models_to_eval = prepare_models(loader)
     results = []
-
+    models_to_eval = (
+        [prepare_multi_compressed_model(loader)]
+        if config.pruning and config.quantization
+        else prepare_models(loader)
+    )
     for model in models_to_eval:
         torch_model = (
             model["model"]
@@ -147,6 +156,23 @@ def perform_inference(verbose, cpu):
             "predictions": predictions,
             "references": references,
         }
+        if config.pruning:
+            if config.baseline_model == "conette":
+                metadata["pruning_setup"] = {
+                    "decoder_keep_ratio": config.decoder_keep_ratio,
+                    "convnext_3072_keep_ratio": config.convnext_3072_keep_ratio,
+                    "convnext_1536_keep_ratio": config.convnext_1536_keep_ratio,
+                    "score_mode": config.pruning_score_mode,
+                    "pruning_method": "convnext > 1536 params 0.5; == 1536 0.875",
+                }
+            elif config.baseline_model == "clapcap":
+                metadata["pruning_setup"] = {
+                    "gpt_keep_ratio": config.gpt_keep_ratio,
+                    "htsat_keep_ratio": config.htsat_keep_ratio,
+                    "mapper_keep_ratio": config.mapper_keep_ratio,
+                    "htsat_min_hidden_dim": config.htsat_min_hidden_dim,
+                    "pruning_method": "",
+                }
         results.append(metadata)
     return results
 
