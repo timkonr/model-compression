@@ -2,18 +2,24 @@ from conette import CoNeTTEConfig, CoNeTTEModel
 from aac_datasets import Clotho, AudioCaps
 import os
 import utils.config as config
+from msclap import CLAP
 
 
 def main():
     if config.download_baseline_model:
-        # Download model
+        print("Downloading baseline models...")
+        print("Downloading CoNeTTE...")
         model = CoNeTTEModel.from_pretrained(
             "Labbeti/conette", config=CoNeTTEConfig.from_pretrained("Labbeti/conette")
         )
         model.save_pretrained(config.model_folder + "baseline/")
-    # Download dataset
+        print("Downloading CLAP...")
+        CLAP(version="clapcap")
+
+    print("Downloading datasets...")
     os.makedirs(config.data_folder, exist_ok=True)
     if len(config.download_clotho) > 0:
+        print("Downloading Clotho...")
         if "eval" in config.download_clotho:
             Clotho(config.data_folder, subset="eval", download=True)
         if "val" in config.download_clotho:
@@ -21,6 +27,7 @@ def main():
         if "dev" in config.download_clotho:
             Clotho(config.data_folder, subset="dev", download=True)
     if len(config.download_audiocaps) > 0:
+        print("Downloading AudioCaps...")
         [
             AudioCaps(
                 config.data_folder,
