@@ -56,6 +56,12 @@ mc-prepare
 
 By default, the dataset is stored in the `./data` directory and the pre-trained CoNeTTE model is stored in the `./model` directory.
 
+Next, you need to download the required files for the metrics.
+
+```bash
+aac-metrics-download
+```
+
 ### Evaluate
 
 For evaluation, the package [aac-metrics](https://aac-metrics.readthedocs.io) is used.
@@ -65,47 +71,10 @@ To run evaluations on a model use the command:
 mc-evaluate
 ```
 
-Configuration of the evaluation can be managed in the config.py. At the moment, by default, only the quantized model is evaluated using AudioCaps. Additional info collected is the model size in MB, the device used for inference and the inference time.
+Configuration of the evaluation can be managed in the config.py.
 
 ### Results
 
-After successful inference of the dataset by the selected models, a JSON file is saved in the results folder called `inference_results_{compression_technique}_{timestamp}.json`. It includes the model and compression technique used, model size in MB, the amount of unquantized parameters, wether the device used was GPU or CPU, total inference time  in seconds, the generated captions and its corresponding baseline references.
+After successful inference of the dataset by the selected models, a JSON file is saved in the results folder called `inference_results_{compression_technique}_{timestamp}.json`. It includes the model and compression technique used, model size in MB, the amount of unquantized parameters, whether the device used was GPU or CPU, total inference time in seconds, additional pruning config if using a pruned model, the generated captions and its corresponding baseline references.
 
 Next, selected metrics are calculated using the generated and baseline captions and saved together with the above mentioned metadata as `eval_results_{device}_{baseline/quantized}_{timestamp}.json`.
-
-### Visualizations
-
-TODO
-
-## TODOS
-
-- [x] project set up
-  - [x] GitHub (repo, readme)
-  - [x] download dataset/model
-  - [x] requirements.txt
-  - [x] add config
-  - [x] add pyproject.toml
-  - [x] add config for choosing metrics
-  - [x] allow evaluation for different datasets
-  - [x] add timer for inference
-  - [x] log device used in evaluation
-  - [x] separate inference from evaluation
-    - [x] allow for using previous inference results in evaluation
-- [ ] quantization
-  - [x] set up quantization
-  - [ ] compare different quantization methods
-  - [x] compare inference time on cpu for baseline model
-- [ ] knowledge distillation
-  - [ ] set up pipeline
-  - [ ] experiment with model architecture and hyperparameters
-  - [ ] fine-tuning pipeline
-- [ ] pruning
-  - [x] set up pruning
-  - [ ] compare various pruning settings ((globally) unstructured, structured)
-  - [ ] log pruning params
-  - [ ] experiment with sparse models
-  - [ ] fine-tuning pipeline
-- [ ] visualizations
-  - [ ] line charts comparing performance over various compression levels
-  - [ ] charts comparing model sizes/inference time/memory usage
-  - [ ] scatter plot comparing performance/model efficiency
