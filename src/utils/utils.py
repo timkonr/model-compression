@@ -1,6 +1,5 @@
 from conette import CoNeTTEConfig, CoNeTTEModel
-
-# from finetune import finetune_conette
+from finetune import finetune_conette
 from prune import prune_clapcap, prune_conette
 from utils import config
 from quantize import make_quantized_model
@@ -67,13 +66,12 @@ def load_model(
     if pruned:
         # model = prune(model, keep_ratio=0.5)
         if config.baseline_model == "conette":
-            model = prune_conette(model, verbose=True)
-            # finetune_conette(
-            #     hf_model=model,
-            #     dataset_name=config.dataset,  # z.B. "audiocaps" oder "clotho"
-            #     num_epochs=1,
-            #     lr=1e-5,
-            # )
+            model, pruned_layer_names = prune_conette(model, verbose=True)
+            finetune_conette(
+                hf_model=model,
+                dataset_name=config.dataset,
+                pruned_layer_names=pruned_layer_names,
+            )
         elif config.baseline_model == "clapcap":
             model.clapcap = prune_clapcap(model.clapcap, verbose=True)
     if quantized:

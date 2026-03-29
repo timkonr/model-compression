@@ -61,6 +61,10 @@ def prune_linear_pair(
     k = max(1, min(k, d_hidden))
 
     scores = compute_linear_hidden_scores(first, second, mode=score_mode)
+    print(f"KR: {keep_ratio}")
+    print(
+        f"Weight score statistics\nMin: {min(scores):.4f}\nMax: {max(scores):.4f}\n Mean: {scores.mean():.4f}\n Median: {scores.median():.4f}\n SD: {scores.std():.4f}"
+    )
     keep_idx = torch.topk(scores, k=k, largest=True).indices
     keep_idx, _ = torch.sort(keep_idx)
 
@@ -97,6 +101,8 @@ def prune_conette(
     """
     model.eval()
 
+    pruned_layer_names = set()
+
     # -------------------------
     # 1) Decoder pruning
     # -------------------------
@@ -115,6 +121,9 @@ def prune_conette(
             layer.linear1 = new_fc1
             layer.linear2 = new_fc2
 
+            pruned_layer_names.add(f"model.decoder.layers.{li}.linear1")
+            pruned_layer_names.add(f"model.decoder.layers.{li}.linear2")
+
             if verbose:
                 print(
                     f"[Decoder layer {li}] hidden dim: "
@@ -125,54 +134,49 @@ def prune_conette(
     # 2) Encoder pruning
     # -------------------------
     if convnext_3072_keep_ratio is not None or convnext_1536_keep_ratio is not None:
-        block_idx = 0
-        for module in model.preprocessor.encoder.stages.modules():
-            has_mlp = hasattr(module, "pwconv1") and hasattr(module, "pwconv2")
-            if not has_mlp:
-                continue
+        for stage_idx, stage in enumerate(model.preprocessor.encoder.stages):
+            for block_idx, block in enumerate(stage):
+                if not (hasattr(block, "pwconv1") and hasattr(block, "pwconv2")):
+                    continue
 
-            pw1 = module.pwconv1
-            pw2 = module.pwconv2
+                pw1 = block.pwconv1
+                pw2 = block.pwconv2
 
-            if not isinstance(pw1, nn.Linear) or not isinstance(pw2, nn.Linear):
-                continue
+                if not isinstance(pw1, nn.Linear) or not isinstance(pw2, nn.Linear):
+                    continue
 
-            old_hidden = pw1.out_features
-            if old_hidden == 1536 and convnext_1536_keep_ratio is not None:
+                old_hidden = pw1.out_features
+                keep_ratio = None
+
+                if old_hidden == 1536 and convnext_1536_keep_ratio is not None:
+                    keep_ratio = convnext_1536_keep_ratio
+                elif old_hidden == 3072 and convnext_3072_keep_ratio is not None:
+                    keep_ratio = convnext_3072_keep_ratio
+
+                if keep_ratio is None:
+                    continue
+
                 new_pw1, new_pw2 = prune_linear_pair(
                     pw1,
                     pw2,
-                    keep_ratio=convnext_1536_keep_ratio,
+                    keep_ratio=keep_ratio,
                     score_mode=score_mode,
                 )
 
-                module.pwconv1 = new_pw1
-                module.pwconv2 = new_pw2
+                block.pwconv1 = new_pw1
+                block.pwconv2 = new_pw2
+
+                base_name = f"preprocessor.encoder.stages.{stage_idx}.{block_idx}"
+                pruned_layer_names.add(f"{base_name}.pwconv1")
+                pruned_layer_names.add(f"{base_name}.pwconv2")
 
                 if verbose:
                     print(
-                        f"[ConvNeXt block {block_idx}] hidden dim: "
+                        f"[ConvNeXt stage {stage_idx} block {block_idx}] hidden dim: "
                         f"{old_hidden} -> {new_pw1.out_features}"
                     )
-            elif old_hidden > 1536 and convnext_3072_keep_ratio is not None:
-                new_pw1, new_pw2 = prune_linear_pair(
-                    pw1,
-                    pw2,
-                    keep_ratio=convnext_3072_keep_ratio,
-                    score_mode=score_mode,
-                )
 
-                module.pwconv1 = new_pw1
-                module.pwconv2 = new_pw2
-
-                if verbose:
-                    print(
-                        f"[ConvNeXt block {block_idx}] hidden dim: "
-                        f"{old_hidden} -> {new_pw1.out_features}"
-                    )
-            block_idx += 1
-
-    return model
+    return model, pruned_layer_names
 
 
 def compute_conv1d_hidden_scores(

@@ -29,7 +29,7 @@ quantization_mode = "dynamic"  # dynamic | static
 pruning = True  # Inference on pruned model
 ### conette
 convnext_3072_keep_ratio = 0.125
-convnext_1536_keep_ratio = 0.9
+convnext_1536_keep_ratio = None
 decoder_keep_ratio = None
 pruning_score_mode = "sum_l2"  # sum_l2 (consider in and out strength) | first_l2 (consider only in strength)
 ### clapcap
