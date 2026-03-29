@@ -48,8 +48,7 @@ def parse_args():
 
 def prepare_dataloader(verbose):
     # Loading dataset
-    print("loading dataset")
-    print(config.dataset, config.dataset == "clotho")
+    print(f"loading dataset {config.dataset}")
 
     if config.dataset == "clotho":
         ds = Clotho(config.data_folder, subset="eval")
@@ -92,7 +91,7 @@ def inference(model: torch.nn.Module, data_loader):
             audio_path = (
                 config.dataset == "clotho"
                 and f"{config.data_folder}/CLOTHO_v2.1/clotho_audio_files/evaluation"
-                or f"{config.data_folder}/AUDIOCAPS/audio22050Hz/test"
+                or f"{config.data_folder}/AUDIOCAPS/audio_22050Hz/test"
             )
             samples = build_samples(csv_path)
             start = perf_counter()
