@@ -40,7 +40,7 @@ def main():
                     f"{config.browser}{':' if len(config.browser_cookie_path) > 0 else ''}{config.browser_cookie_path}",
                 ],
                 audio_format="wav",
-                ssr=22050,
+                sr=22050,
             )
             for subset in config.download_audiocaps
         ]
