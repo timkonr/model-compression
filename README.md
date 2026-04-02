@@ -44,8 +44,6 @@ If you intend to use the AudioCaps dataset, **ffmpeg** and **yt-dlp** need to be
 
 Note: It might be necessary to install the proper pytorch version with CUDA manually.
 
-## Usage
-
 ### Download external data, models and prepare
 
 To download, extract and process data, you need to run:
@@ -61,6 +59,8 @@ Next, you need to download the required files for the metrics.
 ```bash
 aac-metrics-download
 ```
+
+## Usage
 
 ### Evaluate
 
