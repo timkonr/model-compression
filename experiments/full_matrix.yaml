@@ -1,0 +1,321 @@
+# Full experiment matrix for model compression AAC thesis.
+# Run with: mc-run-all --config experiments/full_matrix.yaml
+#
+# Pruning ratios tested: 10%, 20%, 30%, 50%, 70%
+# keep_ratio = 1 - pruning_ratio  (e.g. 10% pruning -> keep_ratio 0.9)
+#
+# Accuracy-efficiency threshold: ≤5% relative SPIDEr loss vs. baseline.
+
+defaults:
+  seed: 42
+  metrics: [spider, fense, meteor]
+  data_folder: data/
+  model_folder: model/
+  inference: true
+  evaluation: true
+  save_inference_results: true
+
+experiments:
+
+  # ─────────────────────────────────────────────
+  # CoNeTTE × Clotho
+  # ─────────────────────────────────────────────
+
+  - model: conette
+    dataset: clotho
+    technique: none
+
+  - model: conette
+    dataset: clotho
+    technique: quantization
+
+  # Pruning — Random baseline (encoder only, convnext_3072)
+  - model: conette
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: random
+      convnext_3072_keep_ratio: 0.9   # 10% pruning
+
+  - model: conette
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: random
+      convnext_3072_keep_ratio: 0.8   # 20% pruning
+
+  - model: conette
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: random
+      convnext_3072_keep_ratio: 0.7   # 30% pruning
+
+  - model: conette
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: random
+      convnext_3072_keep_ratio: 0.5   # 50% pruning
+
+  - model: conette
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: random
+      convnext_3072_keep_ratio: 0.3   # 70% pruning
+
+  # Pruning — L2-norm (encoder only, convnext_3072)
+  - model: conette
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      convnext_3072_keep_ratio: 0.9   # 10% pruning
+
+  - model: conette
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      convnext_3072_keep_ratio: 0.8   # 20% pruning
+
+  - model: conette
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      convnext_3072_keep_ratio: 0.7   # 30% pruning
+
+  - model: conette
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      convnext_3072_keep_ratio: 0.5   # 50% pruning
+
+  - model: conette
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      convnext_3072_keep_ratio: 0.3   # 70% pruning
+
+  # KD (loaded from checkpoint — train separately first)
+  - model: conette
+    dataset: clotho
+    technique: kd
+
+  # ─────────────────────────────────────────────
+  # CoNeTTE × AudioCaps
+  # ─────────────────────────────────────────────
+
+  - model: conette
+    dataset: audiocaps
+    technique: none
+
+  - model: conette
+    dataset: audiocaps
+    technique: quantization
+
+  # Pruning — Random baseline
+  - model: conette
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: random
+      convnext_3072_keep_ratio: 0.9
+
+  - model: conette
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: random
+      convnext_3072_keep_ratio: 0.8
+
+  - model: conette
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: random
+      convnext_3072_keep_ratio: 0.7
+
+  - model: conette
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: random
+      convnext_3072_keep_ratio: 0.5
+
+  - model: conette
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: random
+      convnext_3072_keep_ratio: 0.3
+
+  # Pruning — L2-norm
+  - model: conette
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      convnext_3072_keep_ratio: 0.9
+
+  - model: conette
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      convnext_3072_keep_ratio: 0.8
+
+  - model: conette
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      convnext_3072_keep_ratio: 0.7
+
+  - model: conette
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      convnext_3072_keep_ratio: 0.5
+
+  - model: conette
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      convnext_3072_keep_ratio: 0.3
+
+  - model: conette
+    dataset: audiocaps
+    technique: kd
+
+  # ─────────────────────────────────────────────
+  # CLAPCAP × Clotho
+  # Note: GPT-2 decoder excluded from pruning (6x inference time increase).
+  #       GPT-2 excluded from quantization (tied weights issue).
+  # ─────────────────────────────────────────────
+
+  - model: clapcap
+    dataset: clotho
+    technique: none
+
+  - model: clapcap
+    dataset: clotho
+    technique: quantization
+
+  # Pruning — encoder (HTSAT) only — Random baseline
+  - model: clapcap
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: random
+      htsat_keep_ratio: 0.9
+      htsat_min_hidden_dim: 1536
+
+  - model: clapcap
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: random
+      htsat_keep_ratio: 0.7
+      htsat_min_hidden_dim: 1536
+
+  - model: clapcap
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: random
+      htsat_keep_ratio: 0.5
+      htsat_min_hidden_dim: 1536
+
+  # Pruning — encoder (HTSAT) only — L2-norm
+  - model: clapcap
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      htsat_keep_ratio: 0.9
+      htsat_min_hidden_dim: 1536
+
+  - model: clapcap
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      htsat_keep_ratio: 0.7
+      htsat_min_hidden_dim: 1536
+
+  - model: clapcap
+    dataset: clotho
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      htsat_keep_ratio: 0.5
+      htsat_min_hidden_dim: 1536
+
+  # ─────────────────────────────────────────────
+  # CLAPCAP × AudioCaps
+  # ─────────────────────────────────────────────
+
+  - model: clapcap
+    dataset: audiocaps
+    technique: none
+
+  - model: clapcap
+    dataset: audiocaps
+    technique: quantization
+
+  # Pruning — encoder (HTSAT) only — Random baseline
+  - model: clapcap
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: random
+      htsat_keep_ratio: 0.9
+      htsat_min_hidden_dim: 1536
+
+  - model: clapcap
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: random
+      htsat_keep_ratio: 0.7
+      htsat_min_hidden_dim: 1536
+
+  - model: clapcap
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: random
+      htsat_keep_ratio: 0.5
+      htsat_min_hidden_dim: 1536
+
+  # Pruning — encoder (HTSAT) only — L2-norm
+  - model: clapcap
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      htsat_keep_ratio: 0.9
+      htsat_min_hidden_dim: 1536
+
+  - model: clapcap
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      htsat_keep_ratio: 0.7
+      htsat_min_hidden_dim: 1536
+
+  - model: clapcap
+    dataset: audiocaps
+    technique: pruning
+    pruning:
+      score_mode: sum_l2
+      htsat_keep_ratio: 0.5
+      htsat_min_hidden_dim: 1536

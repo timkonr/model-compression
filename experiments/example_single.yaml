@@ -1,0 +1,35 @@
+# Example: single experiment config.
+# Run with: mc-evaluate --config experiments/example_single.yaml
+
+model: conette          # conette | clapcap
+dataset: clotho         # clotho | audiocaps
+seed: 42
+
+technique: pruning      # none | quantization | pruning | kd | pruning+quantization
+
+pruning:
+  score_mode: sum_l2    # sum_l2 | first_l2 | wanda | random
+  # CoNeTTE encoder (ConvNeXt blocks with hidden_dim=3072 or 1536)
+  convnext_3072_keep_ratio: 0.7   # 30% pruning
+  convnext_1536_keep_ratio: null  # null = skip
+  decoder_keep_ratio: null        # null = skip
+  # CLAPCAP (leave null for CoNeTTE experiments)
+  gpt_keep_ratio: null
+  mapper_keep_ratio: null
+  htsat_keep_ratio: null
+  htsat_min_hidden_dim: 1536
+
+# Uncomment to configure quantization mode (default: dynamic):
+# quantization:
+#   mode: dynamic   # dynamic | static
+
+# Uncomment to configure KD checkpoint path:
+# kd:
+#   model_path: model/best_student_model.pth
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

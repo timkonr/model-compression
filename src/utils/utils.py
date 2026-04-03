@@ -20,7 +20,9 @@ def prepare_models(loader: DataLoader):
             {"model": load_model(quantized=True, loader=loader), "name": "quantized"}
         )
     if config.pruning:
-        models_to_eval.append({"model": load_model(pruned=True), "name": "pruned"})
+        models_to_eval.append(
+            {"model": load_model(pruned=True, loader=loader), "name": "pruned"}
+        )
     if config.kd:
         models_to_eval.append({"model": load_model(kd=True), "name": "kd"})
     return models_to_eval
@@ -34,13 +36,15 @@ def prepare_multi_compressed_model(loader: DataLoader):
 
 
 def load_model(
-    model_path=config.model_folder,
+    model_path=None,
     quantized=False,
     pruned=False,
     kd=False,
     loader=None,
     verbose=True,
 ):
+    if model_path is None:
+        model_path = config.model_folder
     print("loading model")
     baseline_path = model_path + "baseline/"
 
@@ -66,12 +70,14 @@ def load_model(
     if pruned:
         # model = prune(model, keep_ratio=0.5)
         if config.baseline_model == "conette":
-            model, pruned_layer_names = prune_conette(model, verbose=True)
-            finetune_conette(
-                hf_model=model,
-                dataset_name=config.dataset,
-                pruned_layer_names=pruned_layer_names,
+            model, pruned_layer_names = prune_conette(
+                model, verbose=True, loader=loader
             )
+            # finetune_conette(
+            #     hf_model=model,
+            #     dataset_name=config.dataset,
+            #     pruned_layer_names=pruned_layer_names,
+            # )
         elif config.baseline_model == "clapcap":
             model.clapcap = prune_clapcap(model.clapcap, verbose=True)
     if quantized:

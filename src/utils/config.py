@@ -27,11 +27,12 @@ quantization_mode = "dynamic"  # dynamic | static
 
 ## pruning config
 pruning = False  # Inference on pruned model
+pruning_score_mode = "sum_l2"  # wanda (consider weights and activations) | sum_l2 (consider in and out strength) | first_l2 (consider only in strength)
 ### conette
-convnext_3072_keep_ratio = 0.125
-convnext_1536_keep_ratio = None
 decoder_keep_ratio = None
-pruning_score_mode = "sum_l2"  # sum_l2 (consider in and out strength) | first_l2 (consider only in strength)
+convnext_3072_keep_ratio = 0.075
+convnext_1536_keep_ratio = None
+
 ### clapcap
 gpt_keep_ratio = None  # nach 6 stunden abgebrochen
 mapper_keep_ratio = 0.5
@@ -45,3 +46,92 @@ kd_model = "best_student_model.pth"  # Path to kd model
 patience = 5
 num_epochs = 25
 batch_size = 32
+
+## reproducibility
+seed = 42
+
+
+def set_seed(seed_val: int = None) -> None:
+    import random as _random
+    import numpy as _np
+    import torch as _torch
+
+    s = seed_val if seed_val is not None else seed
+    _random.seed(s)
+    _np.random.seed(s)
+    _torch.manual_seed(s)
+    if _torch.cuda.is_available():
+        _torch.cuda.manual_seed_all(s)
+
+
+def load_from_yaml(path: str) -> None:
+    """Load experiment config from YAML and update this module's globals."""
+    import sys
+    import yaml
+
+    with open(path, "r") as f:
+        cfg = yaml.safe_load(f)
+
+    g = sys.modules[__name__].__dict__
+
+    # Model & dataset
+    if "model" in cfg:
+        g["baseline_model"] = cfg["model"]
+    if "dataset" in cfg:
+        g["dataset"] = cfg["dataset"]
+
+    # Seed
+    if "seed" in cfg:
+        g["seed"] = cfg["seed"]
+
+    # Pipeline control
+    for key in ("inference", "evaluation", "save_inference_results"):
+        if key in cfg:
+            g[key] = cfg[key]
+
+    # Paths
+    if "data_folder" in cfg:
+        g["data_folder"] = cfg["data_folder"]
+    if "model_folder" in cfg:
+        g["model_folder"] = cfg["model_folder"]
+
+    # Metrics
+    if "metrics" in cfg:
+        g["metrics"] = tuple(cfg["metrics"])
+
+    # technique: none | quantization | pruning | kd | pruning+quantization
+    technique = cfg.get("technique", "none")
+    g["baseline"] = technique == "none"
+    g["quantization"] = "quantization" in technique
+    g["pruning"] = "pruning" in technique
+    g["kd"] = technique == "kd"
+
+    # Pruning options
+    pruning_cfg = cfg.get("pruning", {}) or {}
+    if "score_mode" in pruning_cfg:
+        g["pruning_score_mode"] = pruning_cfg["score_mode"]
+    for key in (
+        "decoder_keep_ratio",
+        "convnext_3072_keep_ratio",
+        "convnext_1536_keep_ratio",
+    ):
+        if key in pruning_cfg:
+            g[key] = pruning_cfg[key]
+    for key in (
+        "gpt_keep_ratio",
+        "mapper_keep_ratio",
+        "htsat_keep_ratio",
+        "htsat_min_hidden_dim",
+    ):
+        if key in pruning_cfg:
+            g[key] = pruning_cfg[key]
+
+    # Quantization options
+    quant_cfg = cfg.get("quantization", {})
+    if isinstance(quant_cfg, dict) and "mode" in quant_cfg:
+        g["quantization_mode"] = quant_cfg["mode"]
+
+    # KD options
+    kd_cfg = cfg.get("kd", {})
+    if isinstance(kd_cfg, dict) and "model_path" in kd_cfg:
+        g["kd_model"] = kd_cfg["model_path"]

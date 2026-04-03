@@ -19,8 +19,11 @@ import os
 
 
 def parse_args():
-    # Parse args
     parser = argparse.ArgumentParser(description="Evaluate a model.")
+    parser.add_argument(
+        "--config",
+        help="Path to a YAML experiment config file.",
+    )
     parser.add_argument(
         "--cpu", action="store_true", default=True, help="Evaluate on CPU"
     )
@@ -32,17 +35,12 @@ def parse_args():
     )
     parser.add_argument(
         "--path",
-        help="Path to folder containing predictions and references. Only used when config.inference is False.",
+        help="Path to a previously saved inference results JSON file.",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Print some debug output"
     )
     args = parser.parse_args()
-    print(f"Starting with params: {args}")
-    print(
-        f"Starting with config: {dict(filter(lambda kv: not kv[0].startswith('__'),vars(config).items()))}"
-    )
-
     return args
 
 
@@ -166,8 +164,9 @@ def perform_inference(verbose, cpu):
                     "decoder_keep_ratio": config.decoder_keep_ratio,
                     "convnext_3072_keep_ratio": config.convnext_3072_keep_ratio,
                     "convnext_1536_keep_ratio": config.convnext_1536_keep_ratio,
+                    # "decoder_alpha": config.decoder_alpha,
+                    # "convnext_alpha": config.convnext_alpha,
                     "score_mode": config.pruning_score_mode,
-                    "pruning_method": "convnext > 1536 params 0.5; == 1536 0.875",
                 }
             elif config.baseline_model == "clapcap":
                 metadata["pruning_setup"] = {
@@ -175,7 +174,7 @@ def perform_inference(verbose, cpu):
                     "htsat_keep_ratio": config.htsat_keep_ratio,
                     "mapper_keep_ratio": config.mapper_keep_ratio,
                     "htsat_min_hidden_dim": config.htsat_min_hidden_dim,
-                    "pruning_method": "",
+                    "score_mode": config.pruning_score_mode,
                 }
         results.append(metadata)
     return results
@@ -238,15 +237,24 @@ def save_eval_results(eval_results):
 
 
 def main():
+    args = parse_args()
+
+    if args.config:
+        config.load_from_yaml(args.config)
+        config.set_seed(config.seed)
+
+    print(f"Starting with params: {args}")
+    print(
+        f"Starting with config: {dict(filter(lambda kv: not kv[0].startswith('__') and not callable(kv[1]), vars(config).items()))}"
+    )
+
     if not config.inference and not config.evaluation:
         raise ValueError("Doing neither inference nor evaluation")
 
-    args = parse_args()
-
-    if config.inference:
-        inference_results = perform_inference(args.verbose, args.cpu)
-    elif args.path:
+    if args.path:
         inference_results = load_previous_results(args.path)
+    elif config.inference:
+        inference_results = perform_inference(args.verbose, args.cpu)
     else:
         raise ValueError("Inference was set to False while path argument is missing")
 

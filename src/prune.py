@@ -3,6 +3,10 @@ import torch.nn as nn
 from typing import Optional
 import utils.config as config
 from transformers.pytorch_utils import Conv1D
+from conette import CoNeTTEModel
+
+# Sentinel to distinguish "not provided" from None (which means "skip this component")
+_UNSET = object()
 
 
 def compute_linear_hidden_scores(
@@ -20,8 +24,10 @@ def compute_linear_hidden_scores(
       first.weight  = (hidden_dim, in_features)
       second.weight = (out_features, hidden_dim)
     """
+    if mode == "random":
+        return torch.rand(first.out_features)
+
     if mode == "first_l2":
-        # importance = incoming magnitude
         return first.weight.norm(p=2, dim=1)
 
     if mode == "sum_l2":
@@ -60,18 +66,18 @@ def prune_linear_pair(
     k = int(round(d_hidden * keep_ratio))
     k = max(1, min(k, d_hidden))
 
-    scores = compute_linear_hidden_scores(first, second, mode=score_mode)
-    print(f"KR: {keep_ratio}")
-    print(
-        f"Weight score statistics\nMin: {min(scores):.4f}\nMax: {max(scores):.4f}\n Mean: {scores.mean():.4f}\n Median: {scores.median():.4f}\n SD: {scores.std():.4f}"
-    )
     keep_idx = torch.topk(scores, k=k, largest=True).indices
     keep_idx, _ = torch.sort(keep_idx)
 
-    new_first = nn.Linear(d_in, k, bias=(first.bias is not None))
-    new_second = nn.Linear(k, d_out, bias=(second.bias is not None))
+    new_first = nn.Linear(d_in, k, bias=(first.bias is not None)).to(
+        device=first.weight.device,
+        dtype=first.weight.dtype,
+    )
+    new_second = nn.Linear(k, d_out, bias=(second.bias is not None)).to(
+        device=second.weight.device,
+        dtype=second.weight.dtype,
+    )
 
-    # Copy selected hidden neurons
     new_first.weight.copy_(first.weight[keep_idx, :])
     if first.bias is not None:
         new_first.bias.copy_(first.bias[keep_idx])
@@ -85,12 +91,13 @@ def prune_linear_pair(
 
 @torch.no_grad()
 def prune_conette(
-    model: nn.Module,
-    decoder_keep_ratio: Optional[float] = config.decoder_keep_ratio,
-    convnext_3072_keep_ratio: Optional[float] = config.convnext_3072_keep_ratio,
-    convnext_1536_keep_ratio: Optional[float] = config.convnext_1536_keep_ratio,
-    score_mode: str = config.pruning_score_mode,
+    model: CoNeTTEModel,
+    decoder_keep_ratio: Optional[float] = _UNSET,
+    convnext_3072_keep_ratio: Optional[float] = _UNSET,
+    convnext_1536_keep_ratio: Optional[float] = _UNSET,
+    score_mode: str = _UNSET,
     verbose: bool = True,
+    loader: torch.utils.data.DataLoader = None,
 ):
     """
     Prune CoNeTTE MLP blocks:
@@ -99,6 +106,15 @@ def prune_conette(
 
     Set a keep_ratio to None to skip that part.
     """
+    if decoder_keep_ratio is _UNSET:
+        decoder_keep_ratio = config.decoder_keep_ratio
+    if convnext_3072_keep_ratio is _UNSET:
+        convnext_3072_keep_ratio = config.convnext_3072_keep_ratio
+    if convnext_1536_keep_ratio is _UNSET:
+        convnext_1536_keep_ratio = config.convnext_1536_keep_ratio
+    if score_mode is _UNSET:
+        score_mode = config.pruning_score_mode
+
     model.eval()
 
     pruned_layer_names = set()
@@ -192,6 +208,9 @@ def compute_conv1d_hidden_scores(
         first.weight  = (in_features, hidden_dim)
         second.weight = (hidden_dim, out_features)
     """
+    if mode == "random":
+        return torch.rand(first.weight.shape[1])
+
     if mode == "first_l2":
         return first.weight.norm(p=2, dim=0)  # columns of first => hidden dim
 
@@ -241,10 +260,10 @@ def prune_conv1d_pair(
 @torch.no_grad()
 def prune_clapcap(
     model: nn.Module,
-    gpt_keep_ratio: Optional[float] = config.gpt_keep_ratio,
-    mapper_keep_ratio: Optional[float] = config.mapper_keep_ratio,
-    htsat_keep_ratio: Optional[float] = config.htsat_keep_ratio,
-    htsat_min_hidden_dim: int = config.htsat_min_hidden_dim,
+    gpt_keep_ratio: Optional[float] = _UNSET,
+    mapper_keep_ratio: Optional[float] = _UNSET,
+    htsat_keep_ratio: Optional[float] = _UNSET,
+    htsat_min_hidden_dim: int = _UNSET,
     score_mode: str = "sum_l2",
     verbose: bool = True,
 ) -> nn.Module:
@@ -254,6 +273,15 @@ def prune_clapcap(
       - Mapper MLPs      (Linear pair)
       - HTSAT/Swin MLPs  (Linear pair)
     """
+    if gpt_keep_ratio is _UNSET:
+        gpt_keep_ratio = config.gpt_keep_ratio
+    if mapper_keep_ratio is _UNSET:
+        mapper_keep_ratio = config.mapper_keep_ratio
+    if htsat_keep_ratio is _UNSET:
+        htsat_keep_ratio = config.htsat_keep_ratio
+    if htsat_min_hidden_dim is _UNSET:
+        htsat_min_hidden_dim = config.htsat_min_hidden_dim
+
     model.eval()
 
     # -------------------------

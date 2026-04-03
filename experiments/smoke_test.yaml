@@ -1,0 +1,32 @@
+# Smoke test: one run per technique to verify the pipeline end-to-end.
+# Uses CoNeTTE + Clotho (fastest combination).
+# Run with: mc-run-all --config experiments/smoke_test.yaml
+
+defaults:
+  model: conette
+  dataset: clotho
+  seed: 42
+  metrics: [spider]       # only spider to keep it fast
+  data_folder: data/
+  model_folder: model/
+  inference: true
+  evaluation: true
+  save_inference_results: false  # skip saving to keep it clean
+
+experiments:
+
+  - technique: none           # baseline
+
+  - technique: quantization   # dynamic INT8
+
+  - technique: pruning        # random pruning (baseline for L2 comparison)
+    pruning:
+      score_mode: random
+      convnext_3072_keep_ratio: 0.5
+
+  - technique: pruning        # L2-norm pruning
+    pruning:
+      score_mode: sum_l2
+      convnext_3072_keep_ratio: 0.5
+
+  - technique: kd             # KD student model (requires trained checkpoint)

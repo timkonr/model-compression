@@ -18,6 +18,7 @@ classifiers = [
 [project.scripts]
 mc-evaluate = "evaluate:main"
 mc-prepare = "prepare:main"
+mc-run-all = "run_all:main"
 
 [tool.setuptools.dynamic]
 version = {attr = "conette.__version__"}
