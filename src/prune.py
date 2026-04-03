@@ -12,10 +12,11 @@ _UNSET = object()
 def compute_linear_hidden_scores(
     first: nn.Linear,
     second: nn.Linear,
-    mode: str = "sum_l2",
+    mode: str = "wanda",
+    activation_scores: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """
-    Compute one importance score per hidden neuron.
+    Compute one importance score per hidden neuron for a linear pair.
 
     first:  Linear(in_features, hidden_dim)
     second: Linear(hidden_dim, out_features)
@@ -23,6 +24,9 @@ def compute_linear_hidden_scores(
     Shapes:
       first.weight  = (hidden_dim, in_features)
       second.weight = (out_features, hidden_dim)
+
+    For mode="wanda", activation_scores must correspond to the input features
+    of `first`, i.e. shape (in_features,).
     """
     if mode == "random":
         return torch.rand(first.out_features)
@@ -31,12 +35,33 @@ def compute_linear_hidden_scores(
         return first.weight.norm(p=2, dim=1)
 
     if mode == "sum_l2":
-        # importance = incoming magnitude + outgoing magnitude
-        in_score = first.weight.norm(p=2, dim=1)  # (hidden_dim,)
-        out_score = second.weight.norm(p=2, dim=0)  # (hidden_dim,)
+        in_score = first.weight.norm(p=2, dim=1)
+        out_score = second.weight.norm(p=2, dim=0)
         return in_score + out_score
 
-    raise ValueError(f"Unsupported score mode: {mode}")
+    if mode == "wanda":
+        if activation_scores is None:
+            raise RuntimeError("activation_scores are required for mode='wanda'")
+
+        if activation_scores.numel() != first.in_features:
+            raise RuntimeError(
+                f"Activation scores shape {activation_scores.shape} does not match "
+                f"first.in_features={first.in_features}"
+            )
+
+        act = activation_scores.to(device=first.weight.device, dtype=first.weight.dtype)
+
+        # Wanda-like structured score:
+        # incoming weights weighted by input activation magnitude
+        weighted_in = first.weight * act.unsqueeze(0)
+        in_score = weighted_in.norm(p=2, dim=1)
+
+        # keep outgoing magnitude term to reflect hidden -> output importance
+        # out_score = second.weight.norm(p=2, dim=0)
+
+        return in_score
+
+    raise ValueError(f"Unsupported linear score mode: {mode}")
 
 
 @torch.no_grad()
@@ -45,7 +70,8 @@ def prune_linear_pair(
     second: nn.Linear,
     keep_ratio: float,
     score_mode: str = "sum_l2",
-) -> tuple[nn.Linear, nn.Linear]:
+    activation_scores: Optional[torch.Tensor] = None,
+) -> tuple[nn.Linear, nn.Linear, torch.Tensor, float]:
     """
     Structured pruning of an MLP pair:
 
@@ -53,6 +79,9 @@ def prune_linear_pair(
       second: Linear(d_hidden, d_out)
 
     Removes hidden neurons consistently in both layers.
+
+    Returns:
+      new_first, new_second, scores
     """
     d_hidden = first.out_features
     d_in = first.in_features
@@ -62,6 +91,15 @@ def prune_linear_pair(
         raise RuntimeError(
             f"Incompatible pair: first.out={d_hidden}, second.in={second.in_features}"
         )
+
+    keep_ratio = max(0.0, min(1.0, float(keep_ratio)))
+
+    scores = compute_linear_hidden_scores(
+        first,
+        second,
+        mode=score_mode,
+        activation_scores=activation_scores,
+    )
 
     k = int(round(d_hidden * keep_ratio))
     k = max(1, min(k, d_hidden))
@@ -87,6 +125,88 @@ def prune_linear_pair(
         new_second.bias.copy_(second.bias)
 
     return new_first, new_second
+
+
+class ActivationCollector:
+    """
+    Collect mean absolute feature activations over multiple forward passes.
+    """
+
+    def __init__(self):
+        self.abs_sum = None
+        self.num_updates = 0
+
+    def update(self, tensor: torch.Tensor) -> None:
+        tensor = tensor.detach().abs()
+
+        if tensor.ndim == 1:
+            mean_per_feature = tensor
+        else:
+            reduce_dims = tuple(range(tensor.ndim - 1))
+            mean_per_feature = tensor.mean(dim=reduce_dims)
+
+        if self.abs_sum is None:
+            self.abs_sum = mean_per_feature.clone()
+        else:
+            self.abs_sum += mean_per_feature
+
+        self.num_updates += 1
+
+    def mean(self) -> torch.Tensor:
+        if self.abs_sum is None or self.num_updates == 0:
+            raise RuntimeError("No activations collected.")
+        return self.abs_sum / self.num_updates
+
+
+@torch.no_grad()
+def collect_conette_encoder_activation_scores(
+    model: nn.Module,
+    loader,
+    num_batches: int = 10,
+    task: str = _UNSET,
+) -> dict[str, torch.Tensor]:
+    """
+    Collect input activation statistics for CoNeTTE encoder pwconv1 layers.
+    """
+    if task is _UNSET:
+        task = config.dataset
+    model.eval()
+
+    collectors = {}
+    handles = []
+
+    for stage_idx, stage in enumerate(model.preprocessor.encoder.stages):
+        for block_idx, block in enumerate(stage):
+            if not hasattr(block, "pwconv1"):
+                continue
+            if not isinstance(block.pwconv1, nn.Linear):
+                continue
+
+            name = f"preprocessor.encoder.stages.{stage_idx}.{block_idx}.pwconv1"
+            collector = ActivationCollector()
+            collectors[name] = collector
+
+            def make_hook(c):
+                def hook_fn(module, inputs, output):
+                    x = inputs[0]
+                    c.update(x)
+
+                return hook_fn
+
+            handles.append(block.pwconv1.register_forward_hook(make_hook(collector)))
+
+    for batch_idx, batch in enumerate(loader):
+        if batch_idx >= num_batches:
+            break
+
+        audio = batch["audio"]
+        sr = batch["sr"]
+        _ = model(audio, sr, task=task)
+
+    for handle in handles:
+        handle.remove()
+
+    return {name: collector.mean() for name, collector in collectors.items()}
 
 
 @torch.no_grad()
@@ -119,6 +239,14 @@ def prune_conette(
 
     pruned_layer_names = set()
 
+    activation_scores = None
+    if loader is not None and score_mode == "wanda":
+        activation_scores = collect_conette_encoder_activation_scores(
+            model,
+            loader=loader,
+            num_batches=10,
+        )
+
     # -------------------------
     # 1) Decoder pruning
     # -------------------------
@@ -131,7 +259,7 @@ def prune_conette(
                 layer.linear1,
                 layer.linear2,
                 keep_ratio=decoder_keep_ratio,
-                score_mode=score_mode,
+                score_mode="sum_l2",
             )
 
             layer.linear1 = new_fc1
@@ -172,17 +300,28 @@ def prune_conette(
                 if keep_ratio is None:
                     continue
 
+                base_name = f"preprocessor.encoder.stages.{stage_idx}.{block_idx}"
+                block_activation_scores = None
+
+                if activation_scores is not None:
+                    act_name = f"{base_name}.pwconv1"
+                    if act_name in activation_scores:
+                        block_activation_scores = activation_scores[act_name].to(
+                            device=pw1.weight.device,
+                            dtype=pw1.weight.dtype,
+                        )
+
                 new_pw1, new_pw2 = prune_linear_pair(
                     pw1,
                     pw2,
                     keep_ratio=keep_ratio,
                     score_mode=score_mode,
+                    activation_scores=block_activation_scores,
                 )
 
                 block.pwconv1 = new_pw1
                 block.pwconv2 = new_pw2
 
-                base_name = f"preprocessor.encoder.stages.{stage_idx}.{block_idx}"
                 pruned_layer_names.add(f"{base_name}.pwconv1")
                 pruned_layer_names.add(f"{base_name}.pwconv2")
 
@@ -191,7 +330,6 @@ def prune_conette(
                         f"[ConvNeXt stage {stage_idx} block {block_idx}] hidden dim: "
                         f"{old_hidden} -> {new_pw1.out_features}"
                     )
-
     return model, pruned_layer_names
 
 
