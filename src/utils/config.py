@@ -6,9 +6,9 @@ browser = "firefox"  # for downloading audiocaps with yt-dlp, e.g. "chrome" or "
 browser_cookie_path = ""  # optional path to cookies. for more info see https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp
 
 # evaluation config
-baseline = False  # Inference on baseline model
+baseline = True  # Inference on baseline model
 baseline_model = "conette"  # clapcap | conette
-dataset = "audiocaps"  # clotho | audiocaps
+dataset = "clotho"  # clotho | audiocaps
 metrics = (
     "meteor",
     "spider",
@@ -26,7 +26,7 @@ quantization = False  # Inference on quantized model
 quantization_mode = "dynamic"  # dynamic | static
 
 ## pruning config
-pruning = True  # Inference on pruned model
+pruning = False  # Inference on pruned model
 ### conette
 convnext_3072_keep_ratio = 0.125
 convnext_1536_keep_ratio = None
