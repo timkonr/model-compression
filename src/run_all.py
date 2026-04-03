@@ -1,28 +1,11 @@
 """
-mc-run-all: Run the full experiment matrix defined in a YAML file.
+mc-run: Run one experiment or a full matrix, depending on the YAML config.
 
-Usage:
-    mc-run-all --config experiments/full_matrix.yaml
-    mc-run-all --config experiments/full_matrix.yaml --dry-run
+Single experiment (has 'model' key):
+    mc-run --config experiments/example_single.yaml
 
-Matrix YAML format:
-    defaults:
-      seed: 42
-      metrics: [spider, fense, meteor]
-      data_folder: data/
-      model_folder: model/
-      inference: true
-      evaluation: true
-      save_inference_results: true
-
-    experiments:
-      - model: conette
-        dataset: clotho
-        technique: none
-      - model: conette
-        dataset: clotho
-        technique: quantization
-      ...
+Full matrix (has 'experiments' key):
+    mc-run --config experiments/full_matrix.yaml [--dry-run] [--fail-fast]
 """
 
 import argparse
@@ -33,8 +16,11 @@ import os
 import yaml
 
 
+def _is_matrix(cfg: dict) -> bool:
+    return "experiments" in cfg
+
+
 def merge(defaults: dict, experiment: dict) -> dict:
-    """Shallow merge: experiment values override defaults."""
     merged = dict(defaults)
     for k, v in experiment.items():
         if isinstance(v, dict) and isinstance(merged.get(k), dict):
@@ -44,34 +30,37 @@ def merge(defaults: dict, experiment: dict) -> dict:
     return merged
 
 
-def run_experiment(cfg: dict, dry_run: bool) -> int:
-    """Write cfg to a temp YAML and call mc-evaluate. Returns exit code."""
+def _label(cfg: dict) -> str:
+    label = f"{cfg.get('model', '?')} | {cfg.get('dataset', '?')} | {cfg.get('technique', 'none')}"
+    pruning_cfg = cfg.get("pruning", {})
+    if pruning_cfg:
+        ratios = {k: v for k, v in pruning_cfg.items() if "keep_ratio" in k and v is not None}
+        if ratios:
+            label += f" | {ratios}"
+    return label
+
+
+def run_single_subprocess(cfg: dict, dry_run: bool) -> int:
+    """Write cfg to a temp YAML and call evaluate.main() via subprocess."""
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".yaml", delete=False, prefix="mc_exp_"
     ) as f:
         yaml.dump(cfg, f, default_flow_style=False)
         tmp_path = f.name
 
-    label = f"{cfg.get('model','?')} | {cfg.get('dataset','?')} | {cfg.get('technique','none')}"
-    pruning_cfg = cfg.get("pruning", {})
-    if pruning_cfg:
-        ratios = {k: v for k, v in pruning_cfg.items() if "keep_ratio" in k and v is not None}
-        if ratios:
-            label += f" | {ratios}"
-
     print(f"\n{'='*70}")
-    print(f"  Experiment: {label}")
-    print(f"  Config:     {tmp_path}")
+    print(f"  {_label(cfg)}")
     print(f"{'='*70}")
 
     if dry_run:
-        print("  [dry-run] skipping execution")
+        print("  [dry-run] skipping")
         os.unlink(tmp_path)
         return 0
 
+    src_dir = os.path.dirname(os.path.abspath(__file__))
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "evaluate", "--config", tmp_path],
+            [sys.executable, os.path.join(src_dir, "evaluate.py"), "--config", tmp_path],
             check=False,
         )
         return result.returncode
@@ -79,57 +68,74 @@ def run_experiment(cfg: dict, dry_run: bool) -> int:
         os.unlink(tmp_path)
 
 
+def run_matrix(matrix_cfg: dict, dry_run: bool, fail_fast: bool):
+    defaults = matrix_cfg.get("defaults", {})
+    experiments = matrix_cfg.get("experiments", [])
+
+    if not experiments:
+        print("No experiments found.")
+        sys.exit(1)
+
+    print(f"Found {len(experiments)} experiments.")
+    failed = []
+
+    for i, exp in enumerate(experiments):
+        cfg = merge(defaults, exp)
+        print(f"\n[{i+1}/{len(experiments)}]", end="")
+        rc = run_single_subprocess(cfg, dry_run)
+        if rc != 0:
+            failed.append(_label(cfg))
+            if fail_fast:
+                print(f"\nFailed (exit {rc}). Stopping.")
+                sys.exit(rc)
+            print(f"  [WARNING] Failed (exit {rc}), continuing.")
+
+    print(f"\n{'='*70}")
+    print(f"Done. {len(experiments) - len(failed)}/{len(experiments)} succeeded.")
+    if failed:
+        print("Failed:")
+        for f in failed:
+            print(f"  - {f}")
+    print(f"{'='*70}")
+    sys.exit(1 if failed else 0)
+
+
+def run_single(cfg: dict, args):
+    """Run a single experiment in-process."""
+    from utils import config as cfg_module
+    import evaluate
+
+    config_path = args.config
+    cfg_module.load_from_yaml(config_path)
+    cfg_module.set_seed(cfg_module.seed)
+    evaluate.main()
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Run the full experiment matrix.")
-    parser.add_argument("--config", required=True, help="Path to full_matrix.yaml")
+    parser = argparse.ArgumentParser(description="Run one experiment or a full matrix.")
+    parser.add_argument("--config", required=True, help="Path to YAML config.")
+    parser.add_argument("--dry-run", action="store_true", help="Preview without running.")
     parser.add_argument(
-        "--dry-run",
+        "--fail-fast",
         action="store_true",
-        help="Print experiments without running them",
-    )
-    parser.add_argument(
-        "--skip-errors",
-        action="store_true",
-        default=True,
-        help="Continue to next experiment if one fails (default: True)",
+        help="Stop on first failure (matrix mode only).",
     )
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
-        matrix = yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
 
-    defaults = matrix.get("defaults", {})
-    experiments = matrix.get("experiments", [])
-
-    if not experiments:
-        print("No experiments found in matrix config.")
-        sys.exit(1)
-
-    print(f"Found {len(experiments)} experiments.")
-
-    failed = []
-    for i, exp in enumerate(experiments):
-        cfg = merge(defaults, exp)
-        print(f"\n[{i+1}/{len(experiments)}]", end="")
-        rc = run_experiment(cfg, dry_run=args.dry_run)
-        if rc != 0:
-            label = f"{cfg.get('model')} | {cfg.get('dataset')} | {cfg.get('technique')}"
-            failed.append(label)
-            if not args.skip_errors:
-                print(f"\nExperiment failed (exit code {rc}). Stopping.")
-                sys.exit(rc)
-            else:
-                print(f"  [WARNING] Experiment failed (exit code {rc}), continuing.")
-
-    print(f"\n{'='*70}")
-    print(f"Done. {len(experiments) - len(failed)}/{len(experiments)} experiments succeeded.")
-    if failed:
-        print("Failed experiments:")
-        for f in failed:
-            print(f"  - {f}")
-    print(f"{'='*70}")
-
-    sys.exit(1 if failed else 0)
+    if _is_matrix(cfg):
+        run_matrix(cfg, dry_run=args.dry_run, fail_fast=args.fail_fast)
+    else:
+        # Single experiment: call evaluate directly (same process)
+        print(f"\n{'='*70}")
+        print(f"  {_label(cfg)}")
+        print(f"{'='*70}")
+        if args.dry_run:
+            print("  [dry-run] skipping")
+            return
+        run_single(cfg, args)
 
 
 if __name__ == "__main__":

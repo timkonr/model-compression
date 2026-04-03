@@ -6,33 +6,16 @@ from aac_datasets.utils.collate import BasicCollate
 import json
 import argparse
 from time import perf_counter
-from utils.utils import (
-    build_samples,
-    get_model_size,
-    get_model_params,
-    prepare_models,
-    prepare_multi_compressed_model,
-)
+from utils.utils import build_samples, load_model
+from utils.model_size import get_model_size, get_model_params
 from utils import config
 import datetime
 import os
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Evaluate a model.")
-    parser.add_argument(
-        "--config",
-        help="Path to a YAML experiment config file.",
-    )
-    parser.add_argument(
-        "--cpu", action="store_true", default=True, help="Evaluate on CPU"
-    )
-    parser.add_argument(
-        "--gpu",
-        dest="cpu",
-        action="store_false",
-        help="Evaluate on GPU (not available for quantization)",
-    )
+    parser = argparse.ArgumentParser(description="Run a single experiment.")
+    parser.add_argument("--config", help="Path to a YAML experiment config file.")
     parser.add_argument(
         "--path",
         help="Path to a previously saved inference results JSON file.",
@@ -44,8 +27,19 @@ def parse_args():
     return args
 
 
+def _technique_name():
+    if config.pruning and config.quantization:
+        return "pruning+quantization"
+    if config.pruning:
+        return "pruning"
+    if config.quantization:
+        return "quantization"
+    if config.kd:
+        return "kd"
+    return "baseline"
+
+
 def prepare_dataloader(verbose):
-    # Loading dataset
     print(f"loading dataset {config.dataset}")
 
     if config.dataset == "clotho":
@@ -67,9 +61,7 @@ def prepare_dataloader(verbose):
             except Exception as e:
                 print(f"Exception on index {i}: {str(e)}")
 
-    collate = BasicCollate()
-    loader = DataLoader(ds, batch_size=1, collate_fn=collate)
-    return loader
+    return DataLoader(ds, batch_size=1, collate_fn=BasicCollate())
 
 
 def inference(model: torch.nn.Module, data_loader):
@@ -93,147 +85,107 @@ def inference(model: torch.nn.Module, data_loader):
             )
             samples = build_samples(csv_path)
             start = perf_counter()
-            # Test with only two samples
-            # i = 0
             for filename, captions in samples.items():
-                # if i > 1:
-                #     break
                 path = f"{audio_path}/{filename}"
                 if os.path.exists(path):
                     pred = model.generate_caption([path])
                     predictions.extend(pred)
                     references.append(captions)
-                    # i = i + 1
 
         elif config.baseline_model == "conette":
             for i, batch in enumerate(data_loader):
                 audio = batch["audio"]
                 sr = batch["sr"]
-                # Process audio through model
                 outputs = model(audio, sr, task=config.dataset)
                 if i < 1:
                     print("model output:", outputs)
-                candidates = outputs["cands"]
-
-                # Collect predictions and references
-                predictions.extend(candidates)
+                predictions.extend(outputs["cands"])
                 references.extend(batch["captions"])
-        end = perf_counter()
-        inference_time = end - start
-        return predictions, references, inference_time
+
+    inference_time = perf_counter() - start
+    return predictions, references, inference_time
 
 
-def perform_inference(verbose, cpu):
+def perform_inference(verbose):
     loader = prepare_dataloader(verbose)
-    results = []
-    models_to_eval = (
-        [prepare_multi_compressed_model(loader)]
-        if config.pruning and config.quantization
-        else prepare_models(loader)
-    )
-    for model in models_to_eval:
-        torch_model = (
-            model["model"]
-            if config.baseline_model == "conette"
-            else model["model"].clapcap
-        )
-        model_size_mb = get_model_size(torch_model)
-        model_params = get_model_params(torch_model)
-        print(
-            f"starting inference on model {model['name']}, model size: {model_size_mb}"
-        )
 
-        predictions, references, inference_time = inference(
-            model["model"], data_loader=loader
-        )
-        device = str(next(torch_model.parameters()).device)
-        metadata = {
-            "model": config.baseline_model,
-            "compression_technique": model["name"],
-            "model_size_mb": model_size_mb,
-            "unquantized_parameters": model_params,
-            "device": device,
-            "inference_time_in_s": f"{inference_time:.3f}",
-            "dataset": config.dataset,
-            "predictions": predictions,
-            "references": references,
-        }
-        if config.pruning:
-            if config.baseline_model == "conette":
-                metadata["pruning_setup"] = {
-                    "decoder_keep_ratio": config.decoder_keep_ratio,
-                    "convnext_3072_keep_ratio": config.convnext_3072_keep_ratio,
-                    "convnext_1536_keep_ratio": config.convnext_1536_keep_ratio,
-                    # "decoder_alpha": config.decoder_alpha,
-                    # "convnext_alpha": config.convnext_alpha,
-                    "score_mode": config.pruning_score_mode,
-                }
-            elif config.baseline_model == "clapcap":
-                metadata["pruning_setup"] = {
-                    "gpt_keep_ratio": config.gpt_keep_ratio,
-                    "htsat_keep_ratio": config.htsat_keep_ratio,
-                    "mapper_keep_ratio": config.mapper_keep_ratio,
-                    "htsat_min_hidden_dim": config.htsat_min_hidden_dim,
-                    "score_mode": config.pruning_score_mode,
-                }
-        results.append(metadata)
-    return results
+    model = load_model(
+        quantized=config.quantization,
+        pruned=config.pruning,
+        kd=config.kd,
+        loader=loader,
+    )
+
+    technique = _technique_name()
+    torch_model = model if config.baseline_model == "conette" else model.clapcap
+    model_size_mb = get_model_size(torch_model)
+    model_params = get_model_params(torch_model)
+
+    print(f"starting inference: {config.baseline_model} | {technique} | {config.dataset} | {model_size_mb:.1f} MB")
+
+    predictions, references, inference_time = inference(model, data_loader=loader)
+    device = str(next(torch_model.parameters()).device)
+
+    metadata = {
+        "model": config.baseline_model,
+        "compression_technique": technique,
+        "dataset": config.dataset,
+        "seed": config.seed,
+        "model_size_mb": model_size_mb,
+        "unquantized_parameters": model_params,
+        "device": device,
+        "inference_time_in_s": f"{inference_time:.3f}",
+        "predictions": predictions,
+        "references": references,
+    }
+
+    if config.pruning:
+        if config.baseline_model == "conette":
+            metadata["pruning_setup"] = {
+                "decoder_keep_ratio": config.decoder_keep_ratio,
+                "convnext_3072_keep_ratio": config.convnext_3072_keep_ratio,
+                "convnext_1536_keep_ratio": config.convnext_1536_keep_ratio,
+                "score_mode": config.pruning_score_mode,
+            }
+        elif config.baseline_model == "clapcap":
+            metadata["pruning_setup"] = {
+                "gpt_keep_ratio": config.gpt_keep_ratio,
+                "htsat_keep_ratio": config.htsat_keep_ratio,
+                "mapper_keep_ratio": config.mapper_keep_ratio,
+                "htsat_min_hidden_dim": config.htsat_min_hidden_dim,
+                "score_mode": config.pruning_score_mode,
+            }
+
+    return metadata
 
 
 def load_previous_results(path):
     if not os.path.isfile(path):
         raise ValueError(f"{path} is not a file.")
     with open(path, "r") as fp:
-        contents = json.load(fp)
-
-    return [contents]
+        return json.load(fp)
 
 
-def save_results(results, fpath):
+def save_result(result, fpath):
     os.makedirs("results", exist_ok=True)
-    with open(
-        fpath,
-        "w",
-    ) as fp:
-        json.dump(results, fp, indent=2)
+    with open(fpath, "w") as fp:
+        json.dump(result, fp, indent=2)
 
 
-def save_inference_results(inference_results):
-    for r in inference_results:
-        save_results(
-            r,
-            f"results/inference_results_{r['compression_technique']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json",
-        )
-
-
-def perform_evaluation(inference_results):
-    eval_results = []
-    for r in inference_results:
-        print(f"running evaluation on {r['model']} {r['compression_technique']}")
-        predictions = r.pop("predictions")
-        references = r.pop("references")
-        corpus_scores, _ = evaluate(
-            candidates=predictions,
-            mult_references=references,
-            metrics=config.metrics,
-        )
-        results = {
-            key: value.item() if hasattr(value, "item") else value
-            for key, value in corpus_scores.items()
-        }
-
-        r["evaluation_results"] = results
-        eval_results.append(r)
-
-    return eval_results
-
-
-def save_eval_results(eval_results):
-    for r in eval_results:
-        save_results(
-            r,
-            f"results/eval_results_{r['device']}_{r['compression_technique']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json",
-        )
+def perform_evaluation(inference_result):
+    print(f"running evaluation on {inference_result['model']} {inference_result['compression_technique']}")
+    predictions = inference_result.pop("predictions")
+    references = inference_result.pop("references")
+    corpus_scores, _ = evaluate(
+        candidates=predictions,
+        mult_references=references,
+        metrics=config.metrics,
+    )
+    inference_result["evaluation_results"] = {
+        key: value.item() if hasattr(value, "item") else value
+        for key, value in corpus_scores.items()
+    }
+    return inference_result
 
 
 def main():
@@ -243,31 +195,33 @@ def main():
         config.load_from_yaml(args.config)
         config.set_seed(config.seed)
 
-    print(f"Starting with params: {args}")
     print(
-        f"Starting with config: {dict(filter(lambda kv: not kv[0].startswith('__') and not callable(kv[1]), vars(config).items()))}"
+        f"config: {dict(filter(lambda kv: not kv[0].startswith('__') and not callable(kv[1]), vars(config).items()))}"
     )
 
     if not config.inference and not config.evaluation:
         raise ValueError("Doing neither inference nor evaluation")
 
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+
     if args.path:
-        inference_results = load_previous_results(args.path)
+        result = load_previous_results(args.path)
     elif config.inference:
-        inference_results = perform_inference(args.verbose, args.cpu)
+        result = perform_inference(args.verbose)
+        if config.save_inference_results:
+            save_result(
+                result,
+                f"results/inference_{result['compression_technique']}_{result['dataset']}_{ts}.json",
+            )
     else:
-        raise ValueError("Inference was set to False while path argument is missing")
-
-    if args.verbose:
-        print("Inference results:")
-        print(inference_results)
-
-    if config.inference and config.save_inference_results:
-        save_inference_results(inference_results)
+        raise ValueError("inference=False but no --path given")
 
     if config.evaluation:
-        eval_results = perform_evaluation(inference_results)
-        save_eval_results(eval_results)
+        result = perform_evaluation(result)
+        save_result(
+            result,
+            f"results/eval_{result['compression_technique']}_{result['dataset']}_{ts}.json",
+        )
 
 
 if __name__ == "__main__":

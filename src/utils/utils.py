@@ -8,31 +8,6 @@ from msclap import CLAP
 import csv
 
 
-def prepare_models(loader: DataLoader):
-    # Load models
-    models_to_eval = []
-    if config.baseline:
-        models_to_eval.append({"model": load_model(), "name": "baseline"})
-    if config.quantization:
-        models_to_eval.append(
-            {"model": load_model(quantized=True, loader=loader), "name": "quantized"}
-        )
-    if config.pruning:
-        models_to_eval.append(
-            {"model": load_model(pruned=True, loader=loader), "name": "pruned"}
-        )
-    if config.kd:
-        models_to_eval.append({"model": load_model(kd=True), "name": "kd"})
-    return models_to_eval
-
-
-def prepare_multi_compressed_model(loader: DataLoader):
-    return {
-        "model": load_model(quantized=True, pruned=True, loader=loader),
-        "name": "pruned and quantized",
-    }
-
-
 def load_model(
     model_path=None,
     quantized=False,

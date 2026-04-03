@@ -67,19 +67,42 @@ aac-metrics-download
 
 ## Usage
 
-### Evaluate
+Experiments are configured via YAML files in `experiments/`. No manual code editing required.
 
-For evaluation, the package [aac-metrics](https://aac-metrics.readthedocs.io) is used.
-To run evaluations on a model use the command:
+`mc-run` accepts any YAML — it auto-detects whether it describes a single experiment or a full matrix:
 
 ```bash
-mc-evaluate
+mc-run --config experiments/example_single.yaml        # single experiment
+mc-run --config experiments/full_matrix.yaml           # full matrix
+mc-run --config experiments/smoke_test.yaml            # smoke test (one per technique)
+mc-run --config experiments/full_matrix.yaml --dry-run # preview without running
 ```
 
-Configuration of the evaluation can be managed in the config.py.
+In matrix mode, each experiment runs in its own subprocess so memory is fully released between runs.
+
+Edit `experiments/example_single.yaml` to configure an experiment. The available techniques are:
+
+| `technique` value | Description |
+|---|---|
+| `none` | Uncompressed baseline |
+| `quantization` | Dynamic INT8 quantization |
+| `pruning` | Structured pruning (L2-norm or random) |
+| `kd` | Load a KD-trained student model |
+| `pruning+quantization` | Pruning followed by quantization |
+
+### Train a KD student model
+
+After pruning, a student model can be recovered via knowledge distillation:
+
+```bash
+mc-train-kd --student-path checkpoints/pruned/ --dataset audiocaps --epochs 10
+```
+
+The teacher is always the unpruned baseline loaded from `model/baseline/`.
 
 ### Results
 
-After successful inference of the dataset by the selected models, a JSON file is saved in the results folder called `inference_results_{compression_technique}_{timestamp}.json`. It includes the model and compression technique used, model size in MB, the amount of unquantized parameters, whether the device used was GPU or CPU, total inference time in seconds, additional pruning config if using a pruned model, the generated captions and its corresponding baseline references.
+Each experiment saves two JSON files to `results/`:
 
-Next, selected metrics are calculated using the generated and baseline captions and saved together with the above mentioned metadata as `eval_results_{device}_{baseline/quantized}_{timestamp}.json`.
+- `inference_results_{technique}_{timestamp}.json` — generated captions, references, model size, inference time, pruning config
+- `eval_results_{device}_{technique}_{timestamp}.json` — metric scores (SPIDEr, FENSE, METEOR) plus all metadata
