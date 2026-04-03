@@ -34,7 +34,7 @@ Then, you can clone this repository and install it:
 ```bash
 git clone https://github.com/timkonr/model-compression.git
 cd model-compression
-pip install -r requirements.txt
+pip install -r requirements.txt -c constraints.txt
 pip install -e .
 ```
 
