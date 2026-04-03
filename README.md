@@ -20,7 +20,14 @@ The aim of this repository is to provide a platform for experimenting with vario
 
 ## Installation
 
-First, you need to create an environment that contains **python>=3.12** and **pip**. You can use venv, conda, micromamba or some other python environment tool.
+First you have to clone this repository.
+
+```bash
+git clone https://github.com/timkonr/model-compression.git
+cd model-compression
+```
+
+Afterwards you need to create an environment that contains **python>=3.12** and **pip**. You can use venv, conda, micromamba or some other python environment tool.
 
 Here is an example using [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html):
 
@@ -29,11 +36,9 @@ conda create -n model_compression python=3.12.7
 conda activate model_compression
 ```
 
-Then, you can clone this repository and install it:
+Then, you can install the required packages for this repository:
 
 ```bash
-git clone https://github.com/timkonr/model-compression.git
-cd model-compression
 pip install -r requirements.txt -c constraints.txt
 pip install -e .
 ```
