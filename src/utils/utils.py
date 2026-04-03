@@ -1,10 +1,8 @@
 from conette import CoNeTTEConfig, CoNeTTEModel
-from finetune import finetune_conette
 from prune import prune_clapcap, prune_conette
 from utils import config
 from quantize import make_quantized_model
-from student_model import load_student_model
-from model_size import get_model_size, get_model_params
+from utils.model_size import get_model_size, get_model_params
 from torch.utils.data import DataLoader
 from msclap import CLAP
 import csv
@@ -66,7 +64,10 @@ def load_model(
             f"Original model params: {get_model_params(model if config.baseline_model == "conette" else model.clapcap)}"
         )
     if kd:
-        model = load_student_model()
+        kd_path = config.kd_model
+        model = CoNeTTEModel.from_pretrained(
+            kd_path, config=CoNeTTEConfig.from_pretrained(kd_path)
+        )
     if pruned:
         # model = prune(model, keep_ratio=0.5)
         if config.baseline_model == "conette":

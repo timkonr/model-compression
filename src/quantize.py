@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.ao.quantization as tq
-from model_size import (
+from utils.model_size import (
     count_qlinear_weight_bias_elems,
     get_model_params,
 )
