@@ -31,15 +31,7 @@ def merge(defaults: dict, experiment: dict) -> dict:
 
 
 def _label(cfg: dict) -> str:
-    label = f"{cfg.get('model', '?')} | {cfg.get('dataset', '?')} | {cfg.get('technique', 'none')} | {cfg.get('seed', '?')}"
-    pruning_cfg = cfg.get("pruning", {})
-    if pruning_cfg:
-        ratios = {
-            k: v for k, v in pruning_cfg.items() if "keep_ratio" in k and v is not None
-        }
-        if ratios:
-            label += f" | {ratios}"
-    return label
+    return f"{cfg.get('model', '?')} | {cfg.get('dataset', '?')} | {cfg.get('technique', 'none')} | seed: {cfg.get('seed', '?')}"
 
 
 def run_single_subprocess(cfg: dict, dry_run: bool) -> int:
