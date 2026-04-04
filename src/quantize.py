@@ -16,6 +16,7 @@ def make_quantized_model(
     # which would require us to define a specific length for the input audio files and adapt the preprocessor in the process
     if quantization_mode == "dynamic":
         m = model if config.baseline_model == "conette" else model.clapcap
+        m.cpu()
         total_params = get_model_params(m)
         if config.baseline_model == "conette":
             m = torch.quantization.quantize_dynamic(
