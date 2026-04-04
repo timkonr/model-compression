@@ -50,10 +50,12 @@ def count_qlinear_weight_bias_elems(qmodel: nn.Module):
     qlinear_type = torch.ao.nn.quantized.dynamic.Linear
     w_elems = 0
     b_elems = 0
+    n_layers = 0
     for _, mod in qmodel.named_modules():
         if isinstance(mod, qlinear_type):
             w, b = mod._packed_params._weight_bias()
             w_elems += w.numel()
             if b is not None:
                 b_elems += b.numel()
-    return w_elems, b_elems
+            n_layers += 1
+    return w_elems, b_elems, n_layers

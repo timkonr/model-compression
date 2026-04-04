@@ -30,9 +30,12 @@ def make_quantized_model(
             torch.quantization.quantize_dynamic(
                 m.clap_project, {torch.nn.Linear}, dtype=dtype, inplace=True
             )
-        [w, b] = count_qlinear_weight_bias_elems(m)
+        w, b, n_layers = count_qlinear_weight_bias_elems(m)
         print(
-            f"Quantized layers have {w} quantized weight elements and {b} bias elements and {total_params - w - b} non-quantized parameters"
+            f"Quantization summary: {n_layers} Linear layers quantized | "
+            f"{w} quantized weight elements | "
+            f"{b} bias elements | "
+            f"{total_params - w - b} parameters in non-quantized layers"
         )
         return model
     else:
