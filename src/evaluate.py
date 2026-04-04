@@ -184,6 +184,7 @@ def perform_evaluation(inference_result):
         key: value.item() if hasattr(value, "item") else value
         for key, value in corpus_scores.items()
     }
+    print("evaluation completed")
     return inference_result
 
 
@@ -213,10 +214,11 @@ def main():
 
     if config.evaluation:
         result = perform_evaluation(result)
-        save_result(
-            result,
-            f"results/eval_{result['compression_technique']}_{result['dataset']}_{ts}.json",
+        filename = (
+            f"eval_{result['compression_technique']}_{result['dataset']}_{ts}.json"
         )
+        print(f"saving evaluation results to results/{filename}")
+        save_result(result, filename)
 
 
 if __name__ == "__main__":
