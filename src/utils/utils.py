@@ -18,7 +18,7 @@ def load_model(
 ):
     if model_path is None:
         model_path = config.model_folder
-    print("loading model")
+    print(f"loading model {config.baseline_model}")
     baseline_path = model_path + "baseline/"
 
     if config.baseline_model == "conette":
@@ -44,7 +44,15 @@ def load_model(
             kd_path, config=CoNeTTEConfig.from_pretrained(kd_path)
         )
     if pruned:
-        # model = prune(model, keep_ratio=0.5)
+        print("pruning model using setup:")
+        if config.baseline_model == "conette":
+            print(
+                f"decoder_keep_ratio: {config.decoder_keep_ratio}, convnext_3072_keep_ratio: {config.convnext_3072_keep_ratio}, convnext_1536_keep_ratio: {config.convnext_1536_keep_ratio}, score_mode: {config.pruning_score_mode}"
+            )
+        elif config.baseline_model == "clapcap":
+            print(
+                f"gpt_keep_ratio: {config.gpt_keep_ratio}, htsat_keep_ratio: {config.htsat_keep_ratio}, mapper_keep_ratio: {config.mapper_keep_ratio}, htsat_min_hidden_dim: {config.htsat_min_hidden_dim}, score_mode: {config.pruning_score_mode}"
+            )
         if config.baseline_model == "conette":
             model, pruned_layer_names = prune_conette(
                 model, verbose=True, loader=loader
@@ -67,12 +75,13 @@ def load_model(
             if quantized and pruned
             else "Pruned" if pruned else "Quantized" if quantized else "original"
         )
-        print(
-            f"{new_model_type} model size on disk: {get_model_size(model if config.baseline_model == "conette" else model.clapcap):.2f} MB"
-        )
-        print(
-            f"{new_model_type} model params: {get_model_params(model if config.baseline_model == "conette" else model.clapcap)}"
-        )
+        if new_model_type != "original":
+            print(
+                f"{new_model_type} model size on disk: {get_model_size(model if config.baseline_model == "conette" else model.clapcap):.2f} MB"
+            )
+            print(
+                f"{new_model_type} unquantized model params: {get_model_params(model if config.baseline_model == "conette" else model.clapcap)}"
+            )
     return model
 
 

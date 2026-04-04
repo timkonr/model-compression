@@ -68,7 +68,7 @@ def inference(model: torch.nn.Module, data_loader):
     model.eval() if config.baseline_model == "conette" else model.clapcap.eval()
     predictions, references = [], []
 
-    print("predicting eval dataset")
+    print(f"starting inference on device: {str(next(model.parameters()).device)}")
 
     start = perf_counter()
     with torch.no_grad():
@@ -98,11 +98,12 @@ def inference(model: torch.nn.Module, data_loader):
                 sr = batch["sr"]
                 outputs = model(audio, sr, task=config.dataset)
                 if i < 1:
-                    print("model output:", outputs)
+                    print("sample model output:", outputs)
                 predictions.extend(outputs["cands"])
                 references.extend(batch["captions"])
 
     inference_time = perf_counter() - start
+    print(f"inference completed in {inference_time:.3f} seconds")
     return predictions, references, inference_time
 
 
@@ -120,8 +121,6 @@ def perform_inference(verbose):
     torch_model = model if config.baseline_model == "conette" else model.clapcap
     model_size_mb = get_model_size(torch_model)
     model_params = get_model_params(torch_model)
-
-    print(f"starting inference: {config.baseline_model} | {technique} | {config.dataset} | {model_size_mb:.1f} MB")
 
     predictions, references, inference_time = inference(model, data_loader=loader)
     device = str(next(torch_model.parameters()).device)
@@ -173,7 +172,7 @@ def save_result(result, fpath):
 
 
 def perform_evaluation(inference_result):
-    print(f"running evaluation on {inference_result['model']} {inference_result['compression_technique']}")
+    print(f"calculating evaluation metrics...")
     predictions = inference_result.pop("predictions")
     references = inference_result.pop("references")
     corpus_scores, _ = evaluate(
@@ -194,10 +193,6 @@ def main():
     if args.config:
         config.load_from_yaml(args.config)
         config.set_seed(config.seed)
-
-    print(
-        f"config: {dict(filter(lambda kv: not kv[0].startswith('__') and not callable(kv[1]), vars(config).items()))}"
-    )
 
     if not config.inference and not config.evaluation:
         raise ValueError("Doing neither inference nor evaluation")

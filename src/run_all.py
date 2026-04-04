@@ -31,10 +31,12 @@ def merge(defaults: dict, experiment: dict) -> dict:
 
 
 def _label(cfg: dict) -> str:
-    label = f"{cfg.get('model', '?')} | {cfg.get('dataset', '?')} | {cfg.get('technique', 'none')}"
+    label = f"{cfg.get('model', '?')} | {cfg.get('dataset', '?')} | {cfg.get('technique', 'none')} | {cfg.get('seed', '?')}"
     pruning_cfg = cfg.get("pruning", {})
     if pruning_cfg:
-        ratios = {k: v for k, v in pruning_cfg.items() if "keep_ratio" in k and v is not None}
+        ratios = {
+            k: v for k, v in pruning_cfg.items() if "keep_ratio" in k and v is not None
+        }
         if ratios:
             label += f" | {ratios}"
     return label
@@ -50,6 +52,12 @@ def run_single_subprocess(cfg: dict, dry_run: bool) -> int:
 
     print(f"\n{'='*70}")
     print(f"  {_label(cfg)}")
+    pruning_cfg = cfg.get("pruning") or {}
+    if pruning_cfg:
+        print(f"  score_mode: {pruning_cfg.get('score_mode', '?')}")
+        for k, v in pruning_cfg.items():
+            if "keep_ratio" in k and v is not None:
+                print(f"  {k}: {v}")
     print(f"{'='*70}")
 
     if dry_run:
@@ -60,7 +68,12 @@ def run_single_subprocess(cfg: dict, dry_run: bool) -> int:
     src_dir = os.path.dirname(os.path.abspath(__file__))
     try:
         result = subprocess.run(
-            [sys.executable, os.path.join(src_dir, "evaluate.py"), "--config", tmp_path],
+            [
+                sys.executable,
+                os.path.join(src_dir, "evaluate.py"),
+                "--config",
+                tmp_path,
+            ],
             check=False,
         )
         return result.returncode
@@ -114,7 +127,9 @@ def run_single(cfg: dict, args):
 def main():
     parser = argparse.ArgumentParser(description="Run one experiment or a full matrix.")
     parser.add_argument("--config", required=True, help="Path to YAML config.")
-    parser.add_argument("--dry-run", action="store_true", help="Preview without running.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Preview without running."
+    )
     parser.add_argument(
         "--fail-fast",
         action="store_true",
@@ -131,6 +146,12 @@ def main():
         # Single experiment: call evaluate directly (same process)
         print(f"\n{'='*70}")
         print(f"  {_label(cfg)}")
+        pruning_cfg = cfg.get("pruning") or {}
+        if pruning_cfg:
+            print(f"  score_mode: {pruning_cfg.get('score_mode', '?')}")
+            for k, v in pruning_cfg.items():
+                if "keep_ratio" in k and v is not None:
+                    print(f"  {k}: {v}")
         print(f"{'='*70}")
         if args.dry_run:
             print("  [dry-run] skipping")
