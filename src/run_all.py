@@ -30,8 +30,26 @@ def merge(defaults: dict, experiment: dict) -> dict:
     return merged
 
 
+_CONETTE_PRUNING_KEYS = {"decoder_keep_ratio", "convnext_3072_keep_ratio", "convnext_1536_keep_ratio"}
+_CLAPCAP_PRUNING_KEYS = {"gpt_keep_ratio", "mapper_keep_ratio", "htsat_keep_ratio", "htsat_min_hidden_dim"}
+
+
 def _label(cfg: dict) -> str:
     return f"{cfg.get('model', '?')} | {cfg.get('dataset', '?')} | {cfg.get('technique', 'none')} | seed: {cfg.get('seed', '?')}"
+
+
+def _print_header(cfg: dict):
+    print(f"\n{'='*70}")
+    print(f"  {_label(cfg)}")
+    pruning_cfg = cfg.get("pruning") or {}
+    if cfg.get("technique") == "pruning" and pruning_cfg:
+        model = cfg.get("model", "")
+        relevant_keys = _CONETTE_PRUNING_KEYS if model == "conette" else _CLAPCAP_PRUNING_KEYS
+        print(f"  score_mode: {pruning_cfg.get('score_mode', '?')}")
+        for k, v in pruning_cfg.items():
+            if k in relevant_keys and v is not None:
+                print(f"  {k}: {v}")
+    print(f"{'='*70}")
 
 
 def run_single_subprocess(cfg: dict, dry_run: bool) -> int:
@@ -42,14 +60,7 @@ def run_single_subprocess(cfg: dict, dry_run: bool) -> int:
         yaml.dump(cfg, f, default_flow_style=False)
         tmp_path = f.name
 
-    print(f"\n{'='*70}")
-    print(f"  {_label(cfg)}")
-    pruning_cfg = cfg.get("pruning") or {}
-    if pruning_cfg:
-        print(f"  score_mode: {pruning_cfg.get('score_mode', '?')}")
-        for k, v in pruning_cfg.items():
-            if "keep_ratio" in k and v is not None:
-                print(f"  {k}: {v}")
+    _print_header(cfg)
     print(f"{'='*70}")
 
     if dry_run:
@@ -135,16 +146,7 @@ def main():
     if _is_matrix(cfg):
         run_matrix(cfg, dry_run=args.dry_run, fail_fast=args.fail_fast)
     else:
-        # Single experiment: call evaluate directly (same process)
-        print(f"\n{'='*70}")
-        print(f"  {_label(cfg)}")
-        pruning_cfg = cfg.get("pruning") or {}
-        if pruning_cfg:
-            print(f"  score_mode: {pruning_cfg.get('score_mode', '?')}")
-            for k, v in pruning_cfg.items():
-                if "keep_ratio" in k and v is not None:
-                    print(f"  {k}: {v}")
-        print(f"{'='*70}")
+        _print_header(cfg)
         if args.dry_run:
             print("  [dry-run] skipping")
             return
