@@ -1,0 +1,35 @@
+# KD training config — run with: mc-train-kd --config experiments/kd_example.yaml
+#
+# Trains a pruned CoNeTTE student via Knowledge Distillation.
+# The student is pruned internally from the baseline — no pre-saved pruned model needed.
+# Teacher = unpruned baseline (frozen).
+#
+# Loss: L = (1 - alpha) * L_CE + alpha * L_KD
+#   alpha=0.0 → fine-tuning only (CE loss, no teacher signal)
+#   alpha=0.5 → balanced KD (default)
+#   alpha=1.0 → KD only (no ground-truth supervision)
+
+model: conette
+dataset: clotho   # audiocaps | clotho (determines train/val split)
+seed: 42
+
+# Pruning config applied to student before KD training
+# (technique key not used by mc-train-kd, pruning is applied internally)
+pruning:
+  score_mode: sum_l2
+  convnext_3072_threshold: 0.5   # 50% pruning of encoder hidden dims
+  convnext_1536_threshold: null
+  decoder_threshold: null
+
+# KD training hyperparameters
+kd:
+  alpha: 0.5          # KD loss weight — set to 0.0 for plain fine-tuning
+  temperature: 2.0    # Softening temperature for teacher/student distributions
+  lr: 1.0e-5
+  num_epochs: 25
+  batch_size: 16      # Reduce if OOM on T4 GPU
+  patience: 5         # Early stopping patience (epochs without val improvement)
+  save_dir: checkpoints/kd_conette_ac_alpha0.5
+
+data_folder: data/
+model_folder: model/
