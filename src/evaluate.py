@@ -7,7 +7,12 @@ import json
 import argparse
 from time import perf_counter
 from utils.utils import build_samples, load_model
-from utils.model_size import get_model_size, get_model_params
+from utils.model_size import (
+    get_model_size,
+    get_model_params,
+    measure_flops_conette,
+    measure_flops_clapcap,
+)
 from utils import config
 import datetime
 import os
@@ -121,6 +126,38 @@ def perform_inference(verbose):
     model_size_mb = get_model_size(torch_model)
     model_params = get_model_params(torch_model)
 
+    # FLOPs: skip for quantized-only runs — dynamic quantization changes bit-width but not
+    # operation count. FlopCounterMode does not register INT8 aten ops, so measuring a
+    # quantized model yields a severe undercount. Model size is the relevant metric for
+    # quantization; FLOPs are the relevant metric for pruning/KD.
+    print("measuring FLOPs...")
+    if config.quantization and not config.pruning:
+        print(
+            "[FLOPs] Skipped for quantization-only: FLOPs counting not working properly on quantized models. Consider unquantized model instead, as the number of operations does not change anyway."
+        )
+        flops = None
+    elif config.baseline_model == "conette":
+        flops = measure_flops_conette(model, loader, task=config.dataset)
+    else:
+        csv_path = (
+            f"{config.data_folder}/CLOTHO_v2.1/clotho_csv_files/clotho_captions_evaluation.csv"
+            if config.dataset == "clotho"
+            else f"{config.data_folder}/AUDIOCAPS/csv_files_v1/test.csv"
+        )
+        audio_dir = (
+            f"{config.data_folder}/CLOTHO_v2.1/clotho_audio_files/evaluation"
+            if config.dataset == "clotho"
+            else f"{config.data_folder}/AUDIOCAPS/audio_22050Hz/test"
+        )
+        sample_paths = []
+        for filename in build_samples(csv_path):
+            candidate = f"{audio_dir}/{filename}"
+            if os.path.exists(candidate):
+                sample_paths.append(candidate)
+            if len(sample_paths) >= 10:
+                break
+        flops = measure_flops_clapcap(model, sample_paths)
+
     print(f"starting inference on device: {device}")
     predictions, references, inference_time = inference(model, data_loader=loader)
 
@@ -131,6 +168,7 @@ def perform_inference(verbose):
         "seed": config.seed,
         "model_size_mb": model_size_mb,
         "unquantized_parameters": model_params,
+        "flops": flops,
         "device": device,
         "inference_time_in_s": f"{inference_time:.3f}",
         "predictions": predictions,

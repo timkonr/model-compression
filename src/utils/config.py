@@ -20,6 +20,7 @@ save_inference_results = True
 evaluation = True
 data_folder = "data/"  # Path to data folder
 model_folder = "model/"  # Path to model folder
+flops_n_samples = 10  # Number of samples to average over for FLOPs measurement
 
 ## quantization config
 quantization = False  # Inference on quantized model
@@ -125,6 +126,10 @@ def load_from_yaml(path: str) -> None:
     ):
         if key in pruning_cfg:
             g[key] = pruning_cfg[key]
+
+    # FLOPs measurement
+    if "flops_n_samples" in cfg:
+        g["flops_n_samples"] = cfg["flops_n_samples"]
 
     # Quantization options
     quant_cfg = cfg.get("quantization", {})
