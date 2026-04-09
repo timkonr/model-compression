@@ -48,6 +48,7 @@ patience = 5
 num_epochs = 25
 batch_size = 32
 lr = 1e-5          # decoder + projection learning rate
+grad_accum_steps = 1  # gradient accumulation steps (effective_batch = batch_size * grad_accum_steps)
 lr_encoder = 1e-6  # encoder learning rate (lower to avoid overwriting pretrained features)
 alpha = 0.5          # KD loss weight (0 = fine-tuning only, 1 = KD only)
 temperature = 2.0
@@ -144,7 +145,7 @@ def load_from_yaml(path: str) -> None:
     # KD options
     kd_cfg = cfg.get("kd", {})
     if isinstance(kd_cfg, dict):
-        for key in ("model_path", "num_epochs", "batch_size", "lr", "lr_encoder", "alpha", "temperature", "patience", "save_dir"):
+        for key in ("model_path", "num_epochs", "batch_size", "grad_accum_steps", "lr", "lr_encoder", "alpha", "temperature", "patience", "save_dir"):
             config_key = {"model_path": "kd_model", "save_dir": "kd_save_dir"}.get(key, key)
             if key in kd_cfg:
                 g[config_key] = kd_cfg[key]

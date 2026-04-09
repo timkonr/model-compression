@@ -84,7 +84,7 @@ def build_dataloader(dataset_name, subset, batch_size):
     return DataLoader(ds, batch_size=batch_size, shuffle=(subset != "val"), collate_fn=BasicCollate())
 
 
-def train(teacher, student, dataset_name, num_epochs, batch_size, lr, lr_encoder, alpha, temperature, patience, save_dir):
+def train(teacher, student, dataset_name, num_epochs, batch_size, grad_accum_steps, lr, lr_encoder, alpha, temperature, patience, save_dir):
     train_subset = "train" if dataset_name == "audiocaps" else "dev"
 
     train_loader = build_dataloader(dataset_name, train_subset, batch_size)
@@ -99,10 +99,11 @@ def train(teacher, student, dataset_name, num_epochs, batch_size, lr, lr_encoder
     teacher.eval()
 
     # Unfreeze full student — encoder with lower lr, decoder+projection with higher lr
+    # ConvNeXt encoder sits in student.preprocessor.encoder (not student.model.encoder)
     for p in student.parameters():
         p.requires_grad_(True)
 
-    encoder_params = list(student.model.encoder.parameters())
+    encoder_params = list(student.preprocessor.encoder.parameters())
     decoder_params = (
         list(student.model.decoder.parameters()) +
         list(student.model.projection.parameters())
@@ -110,7 +111,8 @@ def train(teacher, student, dataset_name, num_epochs, batch_size, lr, lr_encoder
 
     trainable = sum(p.numel() for p in student.parameters() if p.requires_grad)
     total = sum(p.numel() for p in student.parameters())
-    print(f"KD training | alpha={alpha} | T={temperature} | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size}")
+    effective_batch = batch_size * grad_accum_steps
+    print(f"KD training | alpha={alpha} | T={temperature} | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size} (effective={effective_batch})")
     print(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.1f}%)")
     print(f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e}")
     print(f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e}")
@@ -142,22 +144,26 @@ def train(teacher, student, dataset_name, num_epochs, batch_size, lr, lr_encoder
 
         for step, raw_batch in enumerate(train_loader):
             batch = prepare_batch(student, raw_batch, dataset_name)
-            optimizer.zero_grad()
+
             with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                 loss, loss_ce, loss_kd = train_step(
                     student.model, teacher.model, batch, alpha, temperature,
                     ce_scale=ce_scale.clamp(min=1e-6),
                     kd_scale=kd_scale.clamp(min=1e-6),
                 )
-            # Update EMA scales with detached loss values
+            # Update EMA scales
             ce_scale = ema_decay * ce_scale + (1 - ema_decay) * loss_ce.cpu()
             kd_scale = ema_decay * kd_scale + (1 - ema_decay) * loss_kd.cpu()
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
-            scaler.step(optimizer)
-            scaler.update()
-            scheduler.step()
+
+            # Gradient accumulation: scale loss, accumulate, step every grad_accum_steps
+            scaler.scale(loss / grad_accum_steps).backward()
+            if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(train_loader):
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+                scheduler.step()
 
             epoch_loss += loss.item()
             epoch_ce += loss_ce.item()
@@ -240,6 +246,7 @@ def main():
         dataset_name=config.dataset,
         num_epochs=config.num_epochs,
         batch_size=config.batch_size,
+        grad_accum_steps=config.grad_accum_steps,
         lr=config.lr,
         lr_encoder=config.lr_encoder,
         alpha=config.alpha,
