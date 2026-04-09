@@ -30,14 +30,14 @@ quantization_mode = "dynamic"  # dynamic | static
 pruning = False  # Inference on pruned model
 pruning_score_mode = "sum_l2"  # wanda (consider weights and activations) | sum_l2 (consider in and out strength) | first_l2 (consider only in strength)
 ### conette
-decoder_keep_ratio = None
-convnext_3072_keep_ratio = 0.075
-convnext_1536_keep_ratio = None
+decoder_threshold = None
+convnext_3072_threshold = 0.075
+convnext_1536_threshold = None
 
 ### clapcap
-gpt_keep_ratio = None  # nach 6 stunden abgebrochen
-mapper_keep_ratio = 0.5
-htsat_keep_ratio = 0.75
+gpt_threshold = None  # nach 6 stunden abgebrochen
+mapper_threshold = 0.5
+htsat_threshold = 0.75
 htsat_min_hidden_dim = 1536
 
 
@@ -112,16 +112,16 @@ def load_from_yaml(path: str) -> None:
     if "score_mode" in pruning_cfg:
         g["pruning_score_mode"] = pruning_cfg["score_mode"]
     for key in (
-        "decoder_keep_ratio",
-        "convnext_3072_keep_ratio",
-        "convnext_1536_keep_ratio",
+        "decoder_threshold",
+        "convnext_3072_threshold",
+        "convnext_1536_threshold",
     ):
         if key in pruning_cfg:
             g[key] = pruning_cfg[key]
     for key in (
-        "gpt_keep_ratio",
-        "mapper_keep_ratio",
-        "htsat_keep_ratio",
+        "gpt_threshold",
+        "mapper_threshold",
+        "htsat_threshold",
         "htsat_min_hidden_dim",
     ):
         if key in pruning_cfg:

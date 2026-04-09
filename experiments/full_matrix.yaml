@@ -2,7 +2,7 @@
 # Run with: mc-run-all --config experiments/full_matrix.yaml
 #
 # Pruning ratios tested: 10%, 20%, 30%, 50%, 70%
-# keep_ratio = 1 - pruning_ratio  (e.g. 10% pruning -> keep_ratio 0.9)
+# threshold = 1 - pruning_ratio  (e.g. 10% pruning -> threshold 0.9)
 #
 # Accuracy-efficiency threshold: ≤5% relative SPIDEr loss vs. baseline.
 
@@ -35,35 +35,35 @@ experiments:
     technique: pruning
     pruning:
       score_mode: random
-      convnext_3072_keep_ratio: 0.9   # 10% pruning
+      convnext_3072_threshold: 0.9   # 10% pruning
 
   - model: conette
     dataset: clotho
     technique: pruning
     pruning:
       score_mode: random
-      convnext_3072_keep_ratio: 0.8   # 20% pruning
+      convnext_3072_threshold: 0.8   # 20% pruning
 
   - model: conette
     dataset: clotho
     technique: pruning
     pruning:
       score_mode: random
-      convnext_3072_keep_ratio: 0.7   # 30% pruning
+      convnext_3072_threshold: 0.7   # 30% pruning
 
   - model: conette
     dataset: clotho
     technique: pruning
     pruning:
       score_mode: random
-      convnext_3072_keep_ratio: 0.5   # 50% pruning
+      convnext_3072_threshold: 0.5   # 50% pruning
 
   - model: conette
     dataset: clotho
     technique: pruning
     pruning:
       score_mode: random
-      convnext_3072_keep_ratio: 0.3   # 70% pruning
+      convnext_3072_threshold: 0.3   # 70% pruning
 
   # Pruning — L2-norm (encoder only, convnext_3072)
   - model: conette
@@ -71,35 +71,35 @@ experiments:
     technique: pruning
     pruning:
       score_mode: sum_l2
-      convnext_3072_keep_ratio: 0.9   # 10% pruning
+      convnext_3072_threshold: 0.9   # 10% pruning
 
   - model: conette
     dataset: clotho
     technique: pruning
     pruning:
       score_mode: sum_l2
-      convnext_3072_keep_ratio: 0.8   # 20% pruning
+      convnext_3072_threshold: 0.8   # 20% pruning
 
   - model: conette
     dataset: clotho
     technique: pruning
     pruning:
       score_mode: sum_l2
-      convnext_3072_keep_ratio: 0.7   # 30% pruning
+      convnext_3072_threshold: 0.7   # 30% pruning
 
   - model: conette
     dataset: clotho
     technique: pruning
     pruning:
       score_mode: sum_l2
-      convnext_3072_keep_ratio: 0.5   # 50% pruning
+      convnext_3072_threshold: 0.5   # 50% pruning
 
   - model: conette
     dataset: clotho
     technique: pruning
     pruning:
       score_mode: sum_l2
-      convnext_3072_keep_ratio: 0.3   # 70% pruning
+      convnext_3072_threshold: 0.3   # 70% pruning
 
   # KD (loaded from checkpoint — train separately first)
   - model: conette
@@ -124,35 +124,35 @@ experiments:
     technique: pruning
     pruning:
       score_mode: random
-      convnext_3072_keep_ratio: 0.9
+      convnext_3072_threshold: 0.9
 
   - model: conette
     dataset: audiocaps
     technique: pruning
     pruning:
       score_mode: random
-      convnext_3072_keep_ratio: 0.8
+      convnext_3072_threshold: 0.8
 
   - model: conette
     dataset: audiocaps
     technique: pruning
     pruning:
       score_mode: random
-      convnext_3072_keep_ratio: 0.7
+      convnext_3072_threshold: 0.7
 
   - model: conette
     dataset: audiocaps
     technique: pruning
     pruning:
       score_mode: random
-      convnext_3072_keep_ratio: 0.5
+      convnext_3072_threshold: 0.5
 
   - model: conette
     dataset: audiocaps
     technique: pruning
     pruning:
       score_mode: random
-      convnext_3072_keep_ratio: 0.3
+      convnext_3072_threshold: 0.3
 
   # Pruning — L2-norm
   - model: conette
@@ -160,35 +160,35 @@ experiments:
     technique: pruning
     pruning:
       score_mode: sum_l2
-      convnext_3072_keep_ratio: 0.9
+      convnext_3072_threshold: 0.9
 
   - model: conette
     dataset: audiocaps
     technique: pruning
     pruning:
       score_mode: sum_l2
-      convnext_3072_keep_ratio: 0.8
+      convnext_3072_threshold: 0.8
 
   - model: conette
     dataset: audiocaps
     technique: pruning
     pruning:
       score_mode: sum_l2
-      convnext_3072_keep_ratio: 0.7
+      convnext_3072_threshold: 0.7
 
   - model: conette
     dataset: audiocaps
     technique: pruning
     pruning:
       score_mode: sum_l2
-      convnext_3072_keep_ratio: 0.5
+      convnext_3072_threshold: 0.5
 
   - model: conette
     dataset: audiocaps
     technique: pruning
     pruning:
       score_mode: sum_l2
-      convnext_3072_keep_ratio: 0.3
+      convnext_3072_threshold: 0.3
 
   - model: conette
     dataset: audiocaps
@@ -214,7 +214,7 @@ experiments:
     technique: pruning
     pruning:
       score_mode: random
-      htsat_keep_ratio: 0.9
+      htsat_threshold: 0.9
       htsat_min_hidden_dim: 1536
 
   - model: clapcap
@@ -222,7 +222,7 @@ experiments:
     technique: pruning
     pruning:
       score_mode: random
-      htsat_keep_ratio: 0.7
+      htsat_threshold: 0.7
       htsat_min_hidden_dim: 1536
 
   - model: clapcap
@@ -230,7 +230,7 @@ experiments:
     technique: pruning
     pruning:
       score_mode: random
-      htsat_keep_ratio: 0.5
+      htsat_threshold: 0.5
       htsat_min_hidden_dim: 1536
 
   # Pruning — encoder (HTSAT) only — L2-norm
@@ -239,7 +239,7 @@ experiments:
     technique: pruning
     pruning:
       score_mode: sum_l2
-      htsat_keep_ratio: 0.9
+      htsat_threshold: 0.9
       htsat_min_hidden_dim: 1536
 
   - model: clapcap
@@ -247,7 +247,7 @@ experiments:
     technique: pruning
     pruning:
       score_mode: sum_l2
-      htsat_keep_ratio: 0.7
+      htsat_threshold: 0.7
       htsat_min_hidden_dim: 1536
 
   - model: clapcap
@@ -255,7 +255,7 @@ experiments:
     technique: pruning
     pruning:
       score_mode: sum_l2
-      htsat_keep_ratio: 0.5
+      htsat_threshold: 0.5
       htsat_min_hidden_dim: 1536
 
   # ─────────────────────────────────────────────
@@ -276,7 +276,7 @@ experiments:
     technique: pruning
     pruning:
       score_mode: random
-      htsat_keep_ratio: 0.9
+      htsat_threshold: 0.9
       htsat_min_hidden_dim: 1536
 
   - model: clapcap
@@ -284,7 +284,7 @@ experiments:
     technique: pruning
     pruning:
       score_mode: random
-      htsat_keep_ratio: 0.7
+      htsat_threshold: 0.7
       htsat_min_hidden_dim: 1536
 
   - model: clapcap
@@ -292,7 +292,7 @@ experiments:
     technique: pruning
     pruning:
       score_mode: random
-      htsat_keep_ratio: 0.5
+      htsat_threshold: 0.5
       htsat_min_hidden_dim: 1536
 
   # Pruning — encoder (HTSAT) only — L2-norm
@@ -301,7 +301,7 @@ experiments:
     technique: pruning
     pruning:
       score_mode: sum_l2
-      htsat_keep_ratio: 0.9
+      htsat_threshold: 0.9
       htsat_min_hidden_dim: 1536
 
   - model: clapcap
@@ -309,7 +309,7 @@ experiments:
     technique: pruning
     pruning:
       score_mode: sum_l2
-      htsat_keep_ratio: 0.7
+      htsat_threshold: 0.7
       htsat_min_hidden_dim: 1536
 
   - model: clapcap
@@ -317,5 +317,5 @@ experiments:
     technique: pruning
     pruning:
       score_mode: sum_l2
-      htsat_keep_ratio: 0.5
+      htsat_threshold: 0.5
       htsat_min_hidden_dim: 1536

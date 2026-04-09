@@ -178,16 +178,16 @@ def perform_inference(verbose):
     if config.pruning:
         if config.baseline_model == "conette":
             metadata["pruning_setup"] = {
-                "decoder_keep_ratio": config.decoder_keep_ratio,
-                "convnext_3072_keep_ratio": config.convnext_3072_keep_ratio,
-                "convnext_1536_keep_ratio": config.convnext_1536_keep_ratio,
+                "decoder_threshold": config.decoder_threshold,
+                "convnext_3072_threshold": config.convnext_3072_threshold,
+                "convnext_1536_threshold": config.convnext_1536_threshold,
                 "score_mode": config.pruning_score_mode,
             }
         elif config.baseline_model == "clapcap":
             metadata["pruning_setup"] = {
-                "gpt_keep_ratio": config.gpt_keep_ratio,
-                "htsat_keep_ratio": config.htsat_keep_ratio,
-                "mapper_keep_ratio": config.mapper_keep_ratio,
+                "gpt_threshold": config.gpt_threshold,
+                "htsat_threshold": config.htsat_threshold,
+                "mapper_threshold": config.mapper_threshold,
                 "htsat_min_hidden_dim": config.htsat_min_hidden_dim,
                 "score_mode": config.pruning_score_mode,
             }

@@ -47,11 +47,11 @@ def load_model(
         print("pruning model using setup:")
         if config.baseline_model == "conette":
             print(
-                f"decoder_keep_ratio: {config.decoder_keep_ratio}, convnext_3072_keep_ratio: {config.convnext_3072_keep_ratio}, convnext_1536_keep_ratio: {config.convnext_1536_keep_ratio}, score_mode: {config.pruning_score_mode}"
+                f"decoder_threshold: {config.decoder_threshold}, convnext_3072_threshold: {config.convnext_3072_threshold}, convnext_1536_threshold: {config.convnext_1536_threshold}, score_mode: {config.pruning_score_mode}"
             )
         elif config.baseline_model == "clapcap":
             print(
-                f"gpt_keep_ratio: {config.gpt_keep_ratio}, htsat_keep_ratio: {config.htsat_keep_ratio}, mapper_keep_ratio: {config.mapper_keep_ratio}, htsat_min_hidden_dim: {config.htsat_min_hidden_dim}, score_mode: {config.pruning_score_mode}"
+                f"gpt_threshold: {config.gpt_threshold}, htsat_threshold: {config.htsat_threshold}, mapper_threshold: {config.mapper_threshold}, htsat_min_hidden_dim: {config.htsat_min_hidden_dim}, score_mode: {config.pruning_score_mode}"
             )
         if config.baseline_model == "conette":
             model, pruned_layer_names = prune_conette(

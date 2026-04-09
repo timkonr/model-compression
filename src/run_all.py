@@ -30,8 +30,8 @@ def merge(defaults: dict, experiment: dict) -> dict:
     return merged
 
 
-_CONETTE_PRUNING_KEYS = {"decoder_keep_ratio", "convnext_3072_keep_ratio", "convnext_1536_keep_ratio"}
-_CLAPCAP_PRUNING_KEYS = {"gpt_keep_ratio", "mapper_keep_ratio", "htsat_keep_ratio", "htsat_min_hidden_dim"}
+_CONETTE_PRUNING_KEYS = {"decoder_threshold", "convnext_3072_threshold", "convnext_1536_threshold"}
+_CLAPCAP_PRUNING_KEYS = {"gpt_threshold", "mapper_threshold", "htsat_threshold", "htsat_min_hidden_dim"}
 
 
 def _label(cfg: dict) -> str:

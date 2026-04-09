@@ -68,7 +68,7 @@ def compute_linear_hidden_scores(
 def prune_linear_pair(
     first: nn.Linear,
     second: nn.Linear,
-    keep_ratio: float,
+    threshold: float,
     score_mode: str = "sum_l2",
     activation_scores: Optional[torch.Tensor] = None,
 ) -> tuple[nn.Linear, nn.Linear, torch.Tensor, float]:
@@ -92,7 +92,7 @@ def prune_linear_pair(
             f"Incompatible pair: first.out={d_hidden}, second.in={second.in_features}"
         )
 
-    keep_ratio = max(0.0, min(1.0, float(keep_ratio)))
+    threshold = max(0.0, min(1.0, float(threshold)))
 
     scores = compute_linear_hidden_scores(
         first,
@@ -101,7 +101,7 @@ def prune_linear_pair(
         activation_scores=activation_scores,
     )
 
-    k = int(round(d_hidden * keep_ratio))
+    k = int(round(d_hidden * threshold))
     k = max(1, min(k, d_hidden))
 
     keep_idx = torch.topk(scores, k=k, largest=True).indices
@@ -212,9 +212,9 @@ def collect_conette_encoder_activation_scores(
 @torch.no_grad()
 def prune_conette(
     model: CoNeTTEModel,
-    decoder_keep_ratio: Optional[float] = _UNSET,
-    convnext_3072_keep_ratio: Optional[float] = _UNSET,
-    convnext_1536_keep_ratio: Optional[float] = _UNSET,
+    decoder_threshold: Optional[float] = _UNSET,
+    convnext_3072_threshold: Optional[float] = _UNSET,
+    convnext_1536_threshold: Optional[float] = _UNSET,
     score_mode: str = _UNSET,
     verbose: bool = True,
     loader: torch.utils.data.DataLoader = None,
@@ -224,14 +224,14 @@ def prune_conette(
       - decoder: linear1 / linear2
       - encoder: pwconv1 / pwconv2
 
-    Set a keep_ratio to None to skip that part.
+    Set a threshold to None to skip that part.
     """
-    if decoder_keep_ratio is _UNSET:
-        decoder_keep_ratio = config.decoder_keep_ratio
-    if convnext_3072_keep_ratio is _UNSET:
-        convnext_3072_keep_ratio = config.convnext_3072_keep_ratio
-    if convnext_1536_keep_ratio is _UNSET:
-        convnext_1536_keep_ratio = config.convnext_1536_keep_ratio
+    if decoder_threshold is _UNSET:
+        decoder_threshold = config.decoder_threshold
+    if convnext_3072_threshold is _UNSET:
+        convnext_3072_threshold = config.convnext_3072_threshold
+    if convnext_1536_threshold is _UNSET:
+        convnext_1536_threshold = config.convnext_1536_threshold
     if score_mode is _UNSET:
         score_mode = config.pruning_score_mode
 
@@ -250,7 +250,7 @@ def prune_conette(
     # -------------------------
     # 1) Decoder pruning
     # -------------------------
-    if decoder_keep_ratio is not None:
+    if decoder_threshold is not None:
         dec = model.model.decoder
         for li, layer in enumerate(dec.layers):
             old_hidden = layer.linear1.out_features
@@ -258,7 +258,7 @@ def prune_conette(
             new_fc1, new_fc2 = prune_linear_pair(
                 layer.linear1,
                 layer.linear2,
-                keep_ratio=decoder_keep_ratio,
+                threshold=decoder_threshold,
                 score_mode="sum_l2",
             )
 
@@ -277,7 +277,7 @@ def prune_conette(
     # -------------------------
     # 2) Encoder pruning
     # -------------------------
-    if convnext_3072_keep_ratio is not None or convnext_1536_keep_ratio is not None:
+    if convnext_3072_threshold is not None or convnext_1536_threshold is not None:
         for stage_idx, stage in enumerate(model.preprocessor.encoder.stages):
             for block_idx, block in enumerate(stage):
                 if not (hasattr(block, "pwconv1") and hasattr(block, "pwconv2")):
@@ -290,14 +290,14 @@ def prune_conette(
                     continue
 
                 old_hidden = pw1.out_features
-                keep_ratio = None
+                threshold = None
 
-                if old_hidden == 1536 and convnext_1536_keep_ratio is not None:
-                    keep_ratio = convnext_1536_keep_ratio
-                elif old_hidden == 3072 and convnext_3072_keep_ratio is not None:
-                    keep_ratio = convnext_3072_keep_ratio
+                if old_hidden == 1536 and convnext_1536_threshold is not None:
+                    threshold = convnext_1536_threshold
+                elif old_hidden == 3072 and convnext_3072_threshold is not None:
+                    threshold = convnext_3072_threshold
 
-                if keep_ratio is None:
+                if threshold is None:
                     continue
 
                 base_name = f"preprocessor.encoder.stages.{stage_idx}.{block_idx}"
@@ -314,7 +314,7 @@ def prune_conette(
                 new_pw1, new_pw2 = prune_linear_pair(
                     pw1,
                     pw2,
-                    keep_ratio=keep_ratio,
+                    threshold=threshold,
                     score_mode=score_mode,
                     activation_scores=block_activation_scores,
                 )
@@ -362,7 +362,7 @@ def compute_conv1d_hidden_scores(
 
 @torch.no_grad()
 def prune_conv1d_pair(
-    first: Conv1D, second: Conv1D, keep_ratio: float, score_mode: str = "sum_l2"
+    first: Conv1D, second: Conv1D, threshold: float, score_mode: str = "sum_l2"
 ):
     d_in, d_hidden = first.weight.shape
     d_hidden_2, d_out = second.weight.shape
@@ -372,7 +372,7 @@ def prune_conv1d_pair(
             f"Incompatible Conv1D pair: first hidden={d_hidden}, second hidden={d_hidden_2}"
         )
 
-    k = int(round(d_hidden * keep_ratio))
+    k = int(round(d_hidden * threshold))
     k = max(1, min(k, d_hidden))
 
     scores = compute_conv1d_hidden_scores(first, second, mode=score_mode)
@@ -398,9 +398,9 @@ def prune_conv1d_pair(
 @torch.no_grad()
 def prune_clapcap(
     model: nn.Module,
-    gpt_keep_ratio: Optional[float] = _UNSET,
-    mapper_keep_ratio: Optional[float] = _UNSET,
-    htsat_keep_ratio: Optional[float] = _UNSET,
+    gpt_threshold: Optional[float] = _UNSET,
+    mapper_threshold: Optional[float] = _UNSET,
+    htsat_threshold: Optional[float] = _UNSET,
     htsat_min_hidden_dim: int = _UNSET,
     score_mode: str = "sum_l2",
     verbose: bool = True,
@@ -411,12 +411,12 @@ def prune_clapcap(
       - Mapper MLPs      (Linear pair)
       - HTSAT/Swin MLPs  (Linear pair)
     """
-    if gpt_keep_ratio is _UNSET:
-        gpt_keep_ratio = config.gpt_keep_ratio
-    if mapper_keep_ratio is _UNSET:
-        mapper_keep_ratio = config.mapper_keep_ratio
-    if htsat_keep_ratio is _UNSET:
-        htsat_keep_ratio = config.htsat_keep_ratio
+    if gpt_threshold is _UNSET:
+        gpt_threshold = config.gpt_threshold
+    if mapper_threshold is _UNSET:
+        mapper_threshold = config.mapper_threshold
+    if htsat_threshold is _UNSET:
+        htsat_threshold = config.htsat_threshold
     if htsat_min_hidden_dim is _UNSET:
         htsat_min_hidden_dim = config.htsat_min_hidden_dim
 
@@ -425,7 +425,7 @@ def prune_clapcap(
     # -------------------------
     # 1) GPT2 pruning
     # -------------------------
-    if gpt_keep_ratio is not None:
+    if gpt_threshold is not None:
         gpt_blocks = model.gpt.transformer.h
 
         for i, block in enumerate(gpt_blocks):
@@ -434,7 +434,7 @@ def prune_clapcap(
             new_c_fc, new_c_proj = prune_conv1d_pair(
                 block.mlp.c_fc,
                 block.mlp.c_proj,
-                keep_ratio=gpt_keep_ratio,
+                threshold=gpt_threshold,
                 score_mode=score_mode,
             )
 
@@ -448,7 +448,7 @@ def prune_clapcap(
     # -------------------------
     # 2) Mapper pruning
     # -------------------------
-    if mapper_keep_ratio is not None:
+    if mapper_threshold is not None:
         mapper_layers = model.clap_project.transformer.layers
 
         for i, layer in enumerate(mapper_layers):
@@ -457,7 +457,7 @@ def prune_clapcap(
             new_fc1, new_fc2 = prune_linear_pair(
                 layer.mlp.fc1,
                 layer.mlp.fc2,
-                keep_ratio=mapper_keep_ratio,
+                threshold=mapper_threshold,
                 score_mode=score_mode,
             )
 
@@ -472,7 +472,7 @@ def prune_clapcap(
     # -------------------------
     # 3) HTSAT / Swin MLP pruning
     # -------------------------
-    if htsat_keep_ratio is not None:
+    if htsat_threshold is not None:
         global_block_idx = 0
 
         for stage_idx, stage in enumerate(model.clap.base.htsat.layers):
@@ -496,7 +496,7 @@ def prune_clapcap(
                 new_fc1, new_fc2 = prune_linear_pair(
                     fc1,
                     fc2,
-                    keep_ratio=htsat_keep_ratio,
+                    threshold=htsat_threshold,
                     score_mode=score_mode,
                 )
 
