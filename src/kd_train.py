@@ -112,6 +112,8 @@ def train(teacher, student, dataset_name, num_epochs, batch_size, lr, alpha, tem
     epochs_no_improve = 0
     os.makedirs(save_dir, exist_ok=True)
 
+    scaler = torch.cuda.amp.GradScaler(enabled=torch.cuda.is_available())
+
     for epoch in range(num_epochs):
         student.train()
         epoch_loss = epoch_ce = epoch_kd = 0.0
@@ -120,12 +122,15 @@ def train(teacher, student, dataset_name, num_epochs, batch_size, lr, alpha, tem
         for step, raw_batch in enumerate(train_loader):
             batch = prepare_batch(student, raw_batch, dataset_name)
             optimizer.zero_grad()
-            loss, loss_ce, loss_kd = train_step(
-                student.model, teacher.model, batch, alpha, temperature
-            )
-            loss.backward()
+            with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
+                loss, loss_ce, loss_kd = train_step(
+                    student.model, teacher.model, batch, alpha, temperature
+                )
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             scheduler.step()
 
             epoch_loss += loss.item()

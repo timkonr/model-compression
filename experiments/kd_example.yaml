@@ -24,7 +24,8 @@ pruning:
 # KD training hyperparameters
 kd:
   alpha: 0.5          # KD loss weight — set to 0.0 for plain fine-tuning
-  temperature: 2.0    # Softening temperature for teacher/student distributions
+  temperature: 4.0    # Softening temperature — higher values produce softer distributions
+                      # and amplify KD signal relative to CE loss
   lr: 1.0e-5
   num_epochs: 25
   batch_size: 16      # Reduce if OOM on T4 GPU
