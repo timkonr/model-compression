@@ -68,8 +68,6 @@ def inference(model: torch.nn.Module, data_loader):
     model.eval() if config.baseline_model == "conette" else model.clapcap.eval()
     predictions, references = [], []
 
-    print(f"starting inference on device: {str(next(model.parameters()).device)}")
-
     start = perf_counter()
     with torch.no_grad():
         if config.baseline_model == "clapcap":
@@ -119,11 +117,12 @@ def perform_inference(verbose):
 
     technique = _technique_name()
     torch_model = model if config.baseline_model == "conette" else model.clapcap
+    device = str(next(torch_model.parameters()).device)
     model_size_mb = get_model_size(torch_model)
     model_params = get_model_params(torch_model)
 
+    print(f"starting inference on device: {device}")
     predictions, references, inference_time = inference(model, data_loader=loader)
-    device = str(next(torch_model.parameters()).device)
 
     metadata = {
         "model": config.baseline_model,
