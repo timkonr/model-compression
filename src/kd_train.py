@@ -44,7 +44,16 @@ def kd_loss(student_logits, teacher_logits, temperature):
     return loss * (temperature ** 2)
 
 
-def train_step(student_plm, teacher_plm, batch, alpha, temperature):
+def train_step(student_plm, teacher_plm, batch, alpha, temperature, ce_scale, kd_scale):
+    """
+    Combined CE + KD loss with normalized weighting.
+
+    Raw CE and KD losses have very different magnitudes (CE ~4-5, KD ~0.05),
+    so alpha does not reflect the true gradient contribution without normalization.
+    We divide each loss by a running scale estimate so alpha becomes a true weight:
+        loss = (1-alpha) * (CE / ce_scale) + alpha * (KD / kd_scale)
+    Scale tensors are updated in-place by the caller (EMA of observed loss values).
+    """
     audio, audio_shape = batch["audio"], batch["audio_shape"]
     caps_in, caps_out = batch["captions"][:, :-1], batch["captions"][:, 1:]
 
@@ -57,7 +66,7 @@ def train_step(student_plm, teacher_plm, batch, alpha, temperature):
         teacher_logits = teacher_plm.decode_audio(teacher_enc, "forcing", caps_in=caps_in)
 
     loss_kd = kd_loss(student_logits, teacher_logits, temperature)
-    loss = (1.0 - alpha) * loss_ce + alpha * loss_kd
+    loss = (1.0 - alpha) * (loss_ce / ce_scale) + alpha * (loss_kd / kd_scale)
     return loss, loss_ce.detach(), loss_kd.detach()
 
 
@@ -117,6 +126,13 @@ def train(teacher, student, dataset_name, num_epochs, batch_size, lr, lr_encoder
     epochs_no_improve = 0
     os.makedirs(save_dir, exist_ok=True)
 
+    # Running EMA scale estimates for loss normalization.
+    # Initialized to 1.0 — will adapt after first batch.
+    # EMA decay=0.98 keeps scale estimates stable but responsive.
+    ema_decay = 0.98
+    ce_scale = torch.tensor(1.0)
+    kd_scale = torch.tensor(1.0)
+
     scaler = torch.cuda.amp.GradScaler(enabled=torch.cuda.is_available())
 
     for epoch in range(num_epochs):
@@ -129,8 +145,13 @@ def train(teacher, student, dataset_name, num_epochs, batch_size, lr, lr_encoder
             optimizer.zero_grad()
             with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                 loss, loss_ce, loss_kd = train_step(
-                    student.model, teacher.model, batch, alpha, temperature
+                    student.model, teacher.model, batch, alpha, temperature,
+                    ce_scale=ce_scale.clamp(min=1e-6),
+                    kd_scale=kd_scale.clamp(min=1e-6),
                 )
+            # Update EMA scales with detached loss values
+            ce_scale = ema_decay * ce_scale + (1 - ema_decay) * loss_ce.cpu()
+            kd_scale = ema_decay * kd_scale + (1 - ema_decay) * loss_kd.cpu()
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
@@ -146,6 +167,7 @@ def train(teacher, student, dataset_name, num_epochs, batch_size, lr, lr_encoder
             if step % 100 == 0:
                 print(f"  epoch={epoch} step={step}/{len(train_loader)} "
                       f"loss={loss.item():.4f} ce={loss_ce.item():.4f} kd={loss_kd.item():.4f} "
+                      f"ce_scale={ce_scale.item():.3f} kd_scale={kd_scale.item():.4f} "
                       f"lr={scheduler.get_last_lr()[0]:.2e}")
 
         avg_loss = epoch_loss / n_steps
