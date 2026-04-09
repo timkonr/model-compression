@@ -29,7 +29,8 @@ kd:
   lr: 1.0e-5          # decoder + projection learning rate
   lr_encoder: 1.0e-6  # encoder learning rate (lower to preserve pretrained features)
   num_epochs: 25
-  batch_size: 16      # Reduce if OOM on T4 GPU
+  batch_size: 4       # Physical batch size (T4 16GB limit with full model training)
+  grad_accum_steps: 4 # Effective batch = batch_size * grad_accum_steps = 16
   patience: 5         # Early stopping patience (epochs without val improvement)
   save_dir: checkpoints/kd_conette_ac_alpha0.5
 
