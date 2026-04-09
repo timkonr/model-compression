@@ -75,7 +75,7 @@ def build_dataloader(dataset_name, subset, batch_size):
     return DataLoader(ds, batch_size=batch_size, shuffle=(subset != "val"), collate_fn=BasicCollate())
 
 
-def train(teacher, student, dataset_name, num_epochs, batch_size, lr, alpha, temperature, patience, save_dir):
+def train(teacher, student, dataset_name, num_epochs, batch_size, lr, lr_encoder, alpha, temperature, patience, save_dir):
     train_subset = "train" if dataset_name == "audiocaps" else "dev"
 
     train_loader = build_dataloader(dataset_name, train_subset, batch_size)
@@ -89,22 +89,27 @@ def train(teacher, student, dataset_name, num_epochs, batch_size, lr, alpha, tem
         p.requires_grad_(False)
     teacher.eval()
 
-    # Freeze student encoder, unfreeze decoder + projection
+    # Unfreeze full student — encoder with lower lr, decoder+projection with higher lr
     for p in student.parameters():
-        p.requires_grad_(False)
-    for p in student.model.decoder.parameters():
         p.requires_grad_(True)
-    for p in student.model.projection.parameters():
-        p.requires_grad_(True)
+
+    encoder_params = list(student.model.encoder.parameters())
+    decoder_params = (
+        list(student.model.decoder.parameters()) +
+        list(student.model.projection.parameters())
+    )
 
     trainable = sum(p.numel() for p in student.parameters() if p.requires_grad)
     total = sum(p.numel() for p in student.parameters())
-    print(f"KD training | alpha={alpha} | T={temperature} | lr={lr} | bs={batch_size}")
+    print(f"KD training | alpha={alpha} | T={temperature} | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size}")
     print(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.1f}%)")
+    print(f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e}")
+    print(f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e}")
 
-    optimizer = torch.optim.AdamW(
-        [p for p in student.parameters() if p.requires_grad], lr=lr, weight_decay=1e-4
-    )
+    optimizer = torch.optim.AdamW([
+        {"params": encoder_params, "lr": lr_encoder},
+        {"params": decoder_params, "lr": lr},
+    ], weight_decay=1e-4)
     total_steps = num_epochs * len(train_loader)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=total_steps, eta_min=lr / 100)
 
@@ -214,6 +219,7 @@ def main():
         num_epochs=config.num_epochs,
         batch_size=config.batch_size,
         lr=config.lr,
+        lr_encoder=config.lr_encoder,
         alpha=config.alpha,
         temperature=config.temperature,
         patience=config.patience,

@@ -26,7 +26,8 @@ kd:
   alpha: 0.5          # KD loss weight — set to 0.0 for plain fine-tuning
   temperature: 4.0    # Softening temperature — higher values produce softer distributions
                       # and amplify KD signal relative to CE loss
-  lr: 1.0e-5
+  lr: 1.0e-5          # decoder + projection learning rate
+  lr_encoder: 1.0e-6  # encoder learning rate (lower to preserve pretrained features)
   num_epochs: 25
   batch_size: 16      # Reduce if OOM on T4 GPU
   patience: 5         # Early stopping patience (epochs without val improvement)
