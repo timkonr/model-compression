@@ -46,15 +46,18 @@ def load_model(
         #   1. rebuild the pruned architecture (same pruning config used during KD training)
         #   2. load only the state dict from the KD checkpoint — not from_pretrained
         kd_path = config.kd_model
-        model, _ = prune_conette(model, verbose=True)
+        model, _ = prune_conette(model, verbose=True, loader=loader)
         state_dict_path = os.path.join(kd_path, "pytorch_model.bin")
         if not os.path.exists(state_dict_path):
             # newer HF format uses safetensors
             state_dict_path = os.path.join(kd_path, "model.safetensors")
         if os.path.exists(state_dict_path) and state_dict_path.endswith(".bin"):
             state_dict = torch.load(state_dict_path, map_location="cpu")
-        elif os.path.exists(state_dict_path) and state_dict_path.endswith(".safetensors"):
+        elif os.path.exists(state_dict_path) and state_dict_path.endswith(
+            ".safetensors"
+        ):
             from safetensors.torch import load_file
+
             state_dict = load_file(state_dict_path)
         else:
             raise FileNotFoundError(f"No model weights found in {kd_path}")
@@ -63,7 +66,9 @@ def load_model(
             print(f"[KD load] WARNING: missing keys: {result.missing_keys}")
         if result.unexpected_keys:
             print(f"[KD load] WARNING: unexpected keys: {result.unexpected_keys}")
-        print(f"[KD load] Loaded state dict from {state_dict_path} — {len(state_dict)} keys, no shape mismatches")
+        print(
+            f"[KD load] Loaded state dict from {state_dict_path} — {len(state_dict)} keys, no shape mismatches"
+        )
     if pruned:
         print("pruning model using setup:")
         if config.baseline_model == "conette":

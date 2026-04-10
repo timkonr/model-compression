@@ -244,7 +244,7 @@ def prune_conette(
         activation_scores = collect_conette_encoder_activation_scores(
             model,
             loader=loader,
-            num_batches=10,
+            num_batches=1024,  # following Minitron (Muralidharan et al., 2024)
         )
 
     # -------------------------

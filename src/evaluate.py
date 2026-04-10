@@ -44,15 +44,16 @@ def _technique_name():
     return "baseline"
 
 
-def prepare_dataloader(verbose):
+def prepare_dataloader(verbose, subset):
     print(f"loading dataset {config.dataset}")
 
     if config.dataset == "clotho":
-        ds = Clotho(config.data_folder, subset="eval")
+
+        ds = Clotho(config.data_folder, subset=subset)
     elif config.dataset == "audiocaps":
         ds = AudioCaps(
             config.data_folder,
-            subset="test",
+            subset=subset,
             audio_format="wav",
             sr=22050,
         )
@@ -111,13 +112,24 @@ def inference(model: torch.nn.Module, data_loader):
 
 
 def perform_inference(verbose):
-    loader = prepare_dataloader(verbose)
+    # test_loader: evaluation subset (Clotho="eval", AudioCaps="test") — used for inference
+    test_loader = prepare_dataloader(
+        verbose, subset="test" if config.dataset == "audiocaps" else "eval"
+    )
+
+    # calib_loader: training subset (Clotho="dev", AudioCaps="train") — only needed for
+    # activation-aware pruning calibration (score_mode=wanda). Must NOT be test data.
+    needs_calib = config.pruning and config.pruning_score_mode == "wanda"
+    calib_loader = None
+    if needs_calib:
+        train_subset = "train" if config.dataset == "audiocaps" else "dev"
+        calib_loader = prepare_dataloader(verbose, subset=train_subset)
 
     model = load_model(
         quantized=config.quantization,
         pruned=config.pruning,
         kd=config.kd,
-        loader=loader,
+        loader=calib_loader,
     )
 
     technique = _technique_name()
@@ -137,7 +149,7 @@ def perform_inference(verbose):
         )
         flops = None
     elif config.baseline_model == "conette":
-        flops = measure_flops_conette(model, loader, task=config.dataset)
+        flops = measure_flops_conette(model, test_loader, task=config.dataset)
     else:
         csv_path = (
             f"{config.data_folder}/CLOTHO_v2.1/clotho_csv_files/clotho_captions_evaluation.csv"
@@ -159,7 +171,7 @@ def perform_inference(verbose):
         flops = measure_flops_clapcap(model, sample_paths)
 
     print(f"starting inference on device: {device}")
-    predictions, references, inference_time = inference(model, data_loader=loader)
+    predictions, references, inference_time = inference(model, data_loader=test_loader)
 
     metadata = {
         "model": config.baseline_model,
@@ -251,9 +263,7 @@ def main():
 
     if config.evaluation:
         result = perform_evaluation(result)
-        filename = (
-            f"results/eval_{result['compression_technique']}_{result['dataset']}_{ts}.json"
-        )
+        filename = f"results/eval_{result['compression_technique']}_{result['dataset']}_{ts}.json"
         print(f"saving evaluation results to {filename}")
         save_result(result, filename)
 
