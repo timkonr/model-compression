@@ -53,13 +53,17 @@ def load_model(
             state_dict_path = os.path.join(kd_path, "model.safetensors")
         if os.path.exists(state_dict_path) and state_dict_path.endswith(".bin"):
             state_dict = torch.load(state_dict_path, map_location="cpu")
-            model.load_state_dict(state_dict)
         elif os.path.exists(state_dict_path) and state_dict_path.endswith(".safetensors"):
             from safetensors.torch import load_file
             state_dict = load_file(state_dict_path)
-            model.load_state_dict(state_dict)
         else:
             raise FileNotFoundError(f"No model weights found in {kd_path}")
+        result = model.load_state_dict(state_dict, strict=True)
+        if result.missing_keys:
+            print(f"[KD load] WARNING: missing keys: {result.missing_keys}")
+        if result.unexpected_keys:
+            print(f"[KD load] WARNING: unexpected keys: {result.unexpected_keys}")
+        print(f"[KD load] Loaded state dict from {state_dict_path} — {len(state_dict)} keys, no shape mismatches")
     if pruned:
         print("pruning model using setup:")
         if config.baseline_model == "conette":
