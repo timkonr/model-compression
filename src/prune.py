@@ -234,7 +234,9 @@ def prune_conette(
         convnext_1536_threshold = config.convnext_1536_threshold
     if score_mode is _UNSET:
         score_mode = config.pruning_score_mode
-
+    print(
+        f"Pruning with score mode: {score_mode}, decoder_threshold={decoder_threshold}, convnext_3072_threshold={convnext_3072_threshold}, convnext_1536_threshold={convnext_1536_threshold}  "
+    )
     model.eval()
 
     pruned_layer_names = set()

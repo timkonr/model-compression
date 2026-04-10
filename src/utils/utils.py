@@ -1,3 +1,5 @@
+import json
+
 from conette import CoNeTTEConfig, CoNeTTEModel
 from prune import prune_clapcap, prune_conette
 from utils import config
@@ -46,7 +48,36 @@ def load_model(
         #   1. rebuild the pruned architecture (same pruning config used during KD training)
         #   2. load only the state dict from the KD checkpoint — not from_pretrained
         kd_path = config.kd_model
-        model, _ = prune_conette(model, verbose=True, loader=loader)
+
+        with open(os.path.join(kd_path, "meta.json"), "r") as f:
+            kd_config = json.load(f)
+            print(
+                f"KD checkpoint was trained with pruning config: {kd_config['pruning']}"
+            )
+            decoder_threshold = (
+                kd_config["pruning"].get("decoder_threshold")
+                or config.decoder_threshold
+            )
+            convnext_3072_threshold = (
+                kd_config["pruning"].get("convnext_3072_threshold")
+                or config.convnext_3072_threshold
+            )
+            convnext_1536_threshold = (
+                kd_config["pruning"].get("convnext_1536_threshold")
+                or config.convnext_1536_threshold
+            )
+            score_mode = (
+                kd_config["pruning"].get("score_mode") or config.pruning_score_mode
+            )
+            model, _ = prune_conette(
+                model,
+                verbose=True,
+                loader=loader,
+                decoder_threshold=decoder_threshold,
+                convnext_3072_threshold=convnext_3072_threshold,
+                convnext_1536_threshold=convnext_1536_threshold,
+                score_mode=score_mode,
+            )
         state_dict_path = os.path.join(kd_path, "pytorch_model.bin")
         if not os.path.exists(state_dict_path):
             # newer HF format uses safetensors
