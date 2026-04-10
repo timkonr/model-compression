@@ -6,6 +6,8 @@ from utils.model_size import get_model_size, get_model_params
 from torch.utils.data import DataLoader
 from msclap import CLAP
 import csv
+import os
+import torch
 
 
 def load_model(
@@ -39,10 +41,25 @@ def load_model(
             f"Original model params: {get_model_params(model if config.baseline_model == "conette" else model.clapcap)}"
         )
     if kd:
+        # KD checkpoint was saved from a pruned model, so its state dict has different
+        # tensor shapes than the original config expects. We must:
+        #   1. rebuild the pruned architecture (same pruning config used during KD training)
+        #   2. load only the state dict from the KD checkpoint — not from_pretrained
         kd_path = config.kd_model
-        model = CoNeTTEModel.from_pretrained(
-            kd_path, config=CoNeTTEConfig.from_pretrained(kd_path)
-        )
+        model, _ = prune_conette(model, verbose=True)
+        state_dict_path = os.path.join(kd_path, "pytorch_model.bin")
+        if not os.path.exists(state_dict_path):
+            # newer HF format uses safetensors
+            state_dict_path = os.path.join(kd_path, "model.safetensors")
+        if os.path.exists(state_dict_path) and state_dict_path.endswith(".bin"):
+            state_dict = torch.load(state_dict_path, map_location="cpu")
+            model.load_state_dict(state_dict)
+        elif os.path.exists(state_dict_path) and state_dict_path.endswith(".safetensors"):
+            from safetensors.torch import load_file
+            state_dict = load_file(state_dict_path)
+            model.load_state_dict(state_dict)
+        else:
+            raise FileNotFoundError(f"No model weights found in {kd_path}")
     if pruned:
         print("pruning model using setup:")
         if config.baseline_model == "conette":

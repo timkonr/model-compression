@@ -200,12 +200,22 @@ def train(teacher, student, dataset_name, num_epochs, batch_size, grad_accum_ste
             best_val_loss = monitor
             epochs_no_improve = 0
             best_path = os.path.join(save_dir, "best")
-            student.save_pretrained(best_path)
+            os.makedirs(best_path, exist_ok=True)
+            # Save only the state dict — the config does not reflect pruned dimensions,
+            # so from_pretrained would cause shape mismatches on reload.
+            # Loading requires: prune_conette() first, then load_state_dict().
+            torch.save(student.state_dict(), os.path.join(best_path, "pytorch_model.bin"))
             with open(os.path.join(best_path, "meta.json"), "w") as f:
                 json.dump({
                     "epoch": epoch, "val_loss": monitor,
                     "alpha": alpha, "temperature": temperature,
                     "lr": lr, "dataset": dataset_name,
+                    "pruning": {
+                        "convnext_3072_threshold": config.convnext_3072_threshold,
+                        "convnext_1536_threshold": config.convnext_1536_threshold,
+                        "decoder_threshold": config.decoder_threshold,
+                        "score_mode": config.pruning_score_mode,
+                    },
                 }, f, indent=2)
             print(f"  => New best saved (loss={monitor:.4f})")
         else:

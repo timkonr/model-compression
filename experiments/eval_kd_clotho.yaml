@@ -1,11 +1,22 @@
 # Evaluate KD-trained CoNeTTE student on Clotho.
 # Run with: mc-run --config experiments/eval_kd_clotho.yaml
+#
+# Pruning params MUST match those used in kd_example.yaml during training,
+# so that prune_conette() reconstructs the exact same architecture before
+# loading the saved state dict.
 
 model: conette
 dataset: clotho
 seed: 42
 
 technique: kd
+
+# Must match kd_example.yaml pruning config exactly
+pruning:
+  score_mode: sum_l2
+  convnext_3072_threshold: 0.5
+  convnext_1536_threshold: null
+  decoder_threshold: null
 
 kd:
   model_path: checkpoints/kd_conette_ac_alpha0.5/best
