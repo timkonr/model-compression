@@ -23,17 +23,15 @@ pruning:
 
 # KD training hyperparameters
 kd:
-  alpha: 0.5          # KD loss weight — set to 0.0 for plain fine-tuning
-  temperature: 4.0    # Softening temperature — higher values produce softer distributions
-                      # and amplify KD signal relative to CE loss
-  lr: 1.0e-6          # decoder + projection learning rate (reduced from 1e-5 — high lr
-                      # caused catastrophic forgetting after 1 epoch with frozen encoder)
+  mode: pure_kd       # pure_kd (Minitron BP #5) | hybrid (Hinton: CE + dynamic_alpha*KD)
+  # Temperature τ=1.0 (no softening) — following Minitron (Muralidharan et al., 2024)
+  lr: 1.0e-6          # decoder + projection learning rate
   lr_encoder: 1.0e-7  # encoder learning rate (lower to preserve pretrained features)
   num_epochs: 25
   batch_size: 4       # Physical batch size (T4 16GB limit with full model training)
   grad_accum_steps: 4 # Effective batch = batch_size * grad_accum_steps = 16
   patience: 5         # Early stopping patience (epochs without val improvement)
-  save_dir: checkpoints/kd_conette_clotho_alpha0.5_lr1e6
+  save_dir: checkpoints/kd_conette_clotho_pure_kd
 
 data_folder: data/
 model_folder: model/

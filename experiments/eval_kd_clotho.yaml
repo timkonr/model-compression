@@ -19,7 +19,7 @@ pruning:
   decoder_threshold: null
 
 kd:
-  model_path: checkpoints/kd_conette_ac_alpha0.5/best
+  model_path: checkpoints/kd_conette_clotho_pure_kd/best
 
 metrics: [spider, fense, meteor]
 inference: true
