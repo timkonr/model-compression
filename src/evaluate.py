@@ -252,9 +252,9 @@ def main():
     if config.evaluation:
         result = perform_evaluation(result)
         filename = (
-            f"eval_{result['compression_technique']}_{result['dataset']}_{ts}.json"
+            f"results/eval_{result['compression_technique']}_{result['dataset']}_{ts}.json"
         )
-        print(f"saving evaluation results to results/{filename}")
+        print(f"saving evaluation results to {filename}")
         save_result(result, filename)
 
 
