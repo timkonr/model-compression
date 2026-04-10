@@ -1,0 +1,18 @@
+# Evaluate KD-trained CoNeTTE student on Clotho.
+# Run with: mc-run --config experiments/eval_kd_clotho.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: kd
+
+kd:
+  model_path: checkpoints/kd_conette_ac_alpha0.5/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
