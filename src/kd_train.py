@@ -188,7 +188,9 @@ def train(teacher, student, dataset_name, num_epochs, batch_size, grad_accum_ste
             with torch.no_grad():
                 for raw_batch in val_loader:
                     batch = prepare_batch(student, raw_batch, dataset_name)
-                    loss, _, _ = train_step(student.model, teacher.model, batch, alpha, temperature)
+                    loss, _, _ = train_step(student.model, teacher.model, batch, alpha, temperature,
+                                             ce_scale=ce_scale.clamp(min=1e-6),
+                                             kd_scale=kd_scale.clamp(min=1e-6))
                     val_loss += loss.item()
                     n_val += 1
             monitor = val_loss / max(n_val, 1)
