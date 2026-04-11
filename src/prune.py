@@ -43,23 +43,15 @@ def compute_linear_hidden_scores(
         if activation_scores is None:
             raise RuntimeError("activation_scores are required for mode='wanda'")
 
-        if activation_scores.numel() != first.in_features:
+        if activation_scores.numel() != first.out_features:
             raise RuntimeError(
-                f"Activation scores shape {activation_scores.shape} does not match "
-                f"first.in_features={first.in_features}"
+                f"Wanda scores shape {activation_scores.shape} does not match "
+                f"first.out_features={first.out_features}"
             )
 
-        act = activation_scores.to(device=first.weight.device, dtype=first.weight.dtype)
-
-        # Wanda-like structured score:
-        # incoming weights weighted by input activation magnitude
-        weighted_in = first.weight * act.unsqueeze(0)
-        in_score = weighted_in.norm(p=2, dim=1)
-
-        # keep outgoing magnitude term to reflect hidden -> output importance
-        # out_score = second.weight.norm(p=2, dim=0)
-
-        return in_score
+        return activation_scores.to(
+            device=first.weight.device, dtype=first.weight.dtype
+        )
 
     raise ValueError(f"Unsupported linear score mode: {mode}")
 
@@ -129,33 +121,72 @@ def prune_linear_pair(
 
 class ActivationCollector:
     """
-    Collect mean absolute feature activations over multiple forward passes.
+    Collect structured Wanda scores for one linear layer pair.
+
+    Aggregation:
+      - sequence/time dimension: mean
+      - batch dimension: L2
     """
 
-    def __init__(self):
-        self.abs_sum = None
+    def __init__(self, first: nn.Linear):
+        self.first = first
+        self.score_sum = None
         self.num_updates = 0
 
     def update(self, tensor: torch.Tensor) -> None:
-        tensor = tensor.detach().abs()
+        """
+        tensor shape:
+          - (in_features,)
+          - (batch, in_features)
+          - (batch, seq, in_features)
+          - or any (..., in_features)
+        """
+        x = (
+            tensor.detach()
+            .abs()
+            .to(
+                device=self.first.weight.device,
+                dtype=self.first.weight.dtype,
+            )
+        )
 
-        if tensor.ndim == 1:
-            mean_per_feature = tensor
-        else:
-            reduce_dims = tuple(range(tensor.ndim - 1))
-            mean_per_feature = tensor.mean(dim=reduce_dims)
+        # Case 1: single feature vector
+        if x.ndim == 1:
+            # (in_features,) -> (1, 1, in_features)
+            x = x.unsqueeze(0).unsqueeze(0)
 
-        if self.abs_sum is None:
-            self.abs_sum = mean_per_feature.clone()
+        # Case 2: (batch, in_features)
+        elif x.ndim == 2:
+            # treat as batch with seq len 1
+            x = x.unsqueeze(1)  # (batch, 1, in_features)
+
+        # Case 3+: collapse all middle dims into sequence dimension
         else:
-            self.abs_sum += mean_per_feature
+            batch_size = x.shape[0]
+            x = x.reshape(batch_size, -1, x.shape[-1])  # (batch, seq, in_features)
+
+        # first.weight: (hidden_dim, in_features)
+        # want per-sample, per-sequence, per-neuron contributions:
+        # (batch, seq, hidden_dim)
+        scores = torch.matmul(x, self.first.weight.T).abs()
+
+        # seq aggregation = mean
+        scores = scores.mean(dim=1)  # (batch, hidden_dim)
+
+        # batch aggregation = L2
+        scores = torch.norm(scores, p=2, dim=0)  # (hidden_dim,)
+
+        if self.score_sum is None:
+            self.score_sum = scores.clone()
+        else:
+            self.score_sum += scores
 
         self.num_updates += 1
 
     def mean(self) -> torch.Tensor:
-        if self.abs_sum is None or self.num_updates == 0:
+        if self.score_sum is None or self.num_updates == 0:
             raise RuntimeError("No activations collected.")
-        return self.abs_sum / self.num_updates
+        return self.score_sum / self.num_updates
 
 
 @torch.no_grad()
@@ -183,7 +214,7 @@ def collect_conette_encoder_activation_scores(
                 continue
 
             name = f"preprocessor.encoder.stages.{stage_idx}.{block_idx}.pwconv1"
-            collector = ActivationCollector()
+            collector = ActivationCollector(block.pwconv1)
             collectors[name] = collector
 
             def make_hook(c):
@@ -194,7 +225,6 @@ def collect_conette_encoder_activation_scores(
                 return hook_fn
 
             handles.append(block.pwconv1.register_forward_hook(make_hook(collector)))
-
     for batch_idx, batch in enumerate(loader):
         if batch_idx >= num_batches:
             break
