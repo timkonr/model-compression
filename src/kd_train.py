@@ -113,6 +113,7 @@ def train(
     patience,
     save_dir,
     mode="pure_kd",
+    student_hidden_dims=None,
 ):
     train_subset = "train" if dataset_name == "audiocaps" else "dev"
 
@@ -259,6 +260,7 @@ def train(
                             "score_mode": config.pruning_score_mode,
                             "num_calibration_batches": config.num_calibration_batches,
                         },
+                        "hidden_dims": student_hidden_dims,
                     },
                     f,
                     indent=2,
@@ -304,6 +306,8 @@ def main():
         train_subset = "train" if config.dataset == "audiocaps" else "dev"
         calib_loader = build_dataloader(config.dataset, train_subset, batch_size=1)
     student, _ = prune_conette(student, verbose=True, loader=calib_loader)
+    student_hidden_dims = get_conette_hidden_dims(student)
+    print(f"Student architecture hidden dims: {student_hidden_dims}")
 
     train(
         teacher=teacher,
@@ -317,6 +321,7 @@ def main():
         patience=config.patience,
         save_dir=config.kd_save_dir,
         mode=config.kd_mode,
+        student_hidden_dims=student_hidden_dims,
     )
 
 

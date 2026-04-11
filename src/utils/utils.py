@@ -1,7 +1,7 @@
 import json
 
 from conette import CoNeTTEConfig, CoNeTTEModel
-from prune import prune_clapcap, prune_conette
+from prune import prune_clapcap, prune_conette, rebuild_conette_from_dims
 from utils import config
 from quantize import make_quantized_model
 from utils.model_size import get_model_size, get_model_params
@@ -54,49 +54,44 @@ def load_model(
             print(
                 f"KD checkpoint was trained with pruning config: {kd_config['pruning']}"
             )
-            decoder_threshold = (
-                kd_config["pruning"].get("decoder_threshold")
-                or config.decoder_threshold
-            )
-            convnext_3072_threshold = (
-                kd_config["pruning"].get("convnext_3072_threshold")
-                or config.convnext_3072_threshold
-            )
-            convnext_1536_threshold = (
-                kd_config["pruning"].get("convnext_1536_threshold")
-                or config.convnext_1536_threshold
-            )
-            score_mode = (
-                kd_config["pruning"].get("score_mode") or config.pruning_score_mode
-            )
-            num_calibration_batches = (
-                kd_config["pruning"].get("num_calibration_batches")
-                or config.num_calibration_batches
-            )
-            model, _ = prune_conette(
-                model,
-                verbose=True,
-                loader=loader,
-                decoder_threshold=decoder_threshold,
-                convnext_3072_threshold=convnext_3072_threshold,
-                convnext_1536_threshold=convnext_1536_threshold,
-                score_mode=score_mode,
-                num_calibration_batches=num_calibration_batches,
-            )
+
+        # Load state dict (always needed — also used to extract dims in legacy path)
         state_dict_path = os.path.join(kd_path, "pytorch_model.bin")
         if not os.path.exists(state_dict_path):
-            # newer HF format uses safetensors
             state_dict_path = os.path.join(kd_path, "model.safetensors")
         if os.path.exists(state_dict_path) and state_dict_path.endswith(".bin"):
             state_dict = torch.load(state_dict_path, map_location="cpu")
-        elif os.path.exists(state_dict_path) and state_dict_path.endswith(
-            ".safetensors"
-        ):
+        elif os.path.exists(state_dict_path) and state_dict_path.endswith(".safetensors"):
             from safetensors.torch import load_file
-
             state_dict = load_file(state_dict_path)
         else:
             raise FileNotFoundError(f"No model weights found in {kd_path}")
+
+        hidden_dims = kd_config.get("hidden_dims")
+        if not hidden_dims:
+            # Legacy: no hidden_dims saved → extract exact shapes from the state dict.
+            # pwconv1.weight shape is (hidden_dim, d_in) and linear1.weight is (hidden_dim, d_in).
+            print(
+                "[KD load] No hidden_dims in meta.json — extracting dims from state dict "
+                "(fixes wanda non-determinism for old checkpoints)"
+            )
+            hidden_dims = {}
+            for key, tensor in state_dict.items():
+                # Encoder blocks: preprocessor.encoder.stages.S.B.pwconv1.weight
+                if key.endswith(".pwconv1.weight"):
+                    layer_key = key[: -len(".pwconv1.weight")]
+                    hidden_dims[layer_key] = tensor.shape[0]
+                # Decoder blocks: model.decoder.layers.L.linear1.weight
+                elif key.endswith(".linear1.weight") and "decoder" in key:
+                    layer_key = key[: -len(".linear1.weight")]
+                    hidden_dims[layer_key] = tensor.shape[0]
+            print(f"[KD load] Extracted hidden_dims for {len(hidden_dims)} layers from state dict")
+
+        print(
+            f"[KD load] Rebuilding architecture from hidden_dims ({len(hidden_dims)} layers)"
+        )
+        model = rebuild_conette_from_dims(model, hidden_dims, verbose=True)
+
         result = model.load_state_dict(state_dict, strict=True)
         if result.missing_keys:
             print(f"[KD load] WARNING: missing keys: {result.missing_keys}")

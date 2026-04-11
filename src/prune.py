@@ -201,6 +201,79 @@ def allocate_layerwise_keep_indices(
     return keep_indices
 
 
+def get_conette_hidden_dims(model: CoNeTTEModel) -> dict[str, int]:
+    """
+    Read the current hidden dimensions from all prunable CoNeTTE layers.
+
+    Returns a dict mapping layer keys to their current hidden dim:
+      "preprocessor.encoder.stages.{s}.{b}" -> pwconv1.out_features
+      "model.decoder.layers.{i}"             -> linear1.out_features
+    """
+    dims = {}
+    for stage_idx, stage in enumerate(model.preprocessor.encoder.stages):
+        for block_idx, block in enumerate(stage):
+            if hasattr(block, "pwconv1") and isinstance(block.pwconv1, nn.Linear):
+                key = f"preprocessor.encoder.stages.{stage_idx}.{block_idx}"
+                dims[key] = block.pwconv1.out_features
+    for li, layer in enumerate(model.model.decoder.layers):
+        if hasattr(layer, "linear1") and isinstance(layer.linear1, nn.Linear):
+            key = f"model.decoder.layers.{li}"
+            dims[key] = layer.linear1.out_features
+    return dims
+
+
+@torch.no_grad()
+def rebuild_conette_from_dims(
+    model: CoNeTTEModel,
+    hidden_dims: dict[str, int],
+    verbose: bool = False,
+) -> CoNeTTEModel:
+    """
+    Reshape CoNeTTE Linear layers to saved hidden dims WITHOUT copying weights.
+
+    Weights will be loaded from a state dict afterward. This is used when loading
+    a KD checkpoint to avoid re-running Wanda (which is non-deterministic due to
+    calibration sample ordering → different keep indices → shape mismatch).
+
+    Starts from the full baseline model; replaces each pwconv pair / decoder FC
+    pair with a new Linear layer of the saved size.
+    """
+    for stage_idx, stage in enumerate(model.preprocessor.encoder.stages):
+        for block_idx, block in enumerate(stage):
+            if not (hasattr(block, "pwconv1") and isinstance(block.pwconv1, nn.Linear)):
+                continue
+            key = f"preprocessor.encoder.stages.{stage_idx}.{block_idx}"
+            if key not in hidden_dims:
+                continue
+            target_k = hidden_dims[key]
+            d_in = block.pwconv1.in_features
+            d_out = block.pwconv2.out_features
+            has_bias1 = block.pwconv1.bias is not None
+            has_bias2 = block.pwconv2.bias is not None
+            block.pwconv1 = nn.Linear(d_in, target_k, bias=has_bias1)
+            block.pwconv2 = nn.Linear(target_k, d_out, bias=has_bias2)
+            if verbose:
+                print(f"[Rebuild] {key}: hidden dim set to {target_k}")
+
+    for li, layer in enumerate(model.model.decoder.layers):
+        key = f"model.decoder.layers.{li}"
+        if key not in hidden_dims:
+            continue
+        if not (hasattr(layer, "linear1") and isinstance(layer.linear1, nn.Linear)):
+            continue
+        target_k = hidden_dims[key]
+        d_in = layer.linear1.in_features
+        d_out = layer.linear2.out_features
+        has_bias1 = layer.linear1.bias is not None
+        has_bias2 = layer.linear2.bias is not None
+        layer.linear1 = nn.Linear(d_in, target_k, bias=has_bias1)
+        layer.linear2 = nn.Linear(target_k, d_out, bias=has_bias2)
+        if verbose:
+            print(f"[Rebuild] {key}: hidden dim set to {target_k}")
+
+    return model
+
+
 class ActivationCollector:
     """
     Collect structured Wanda scores for one linear layer pair.
