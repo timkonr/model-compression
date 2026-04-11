@@ -9,6 +9,7 @@ technique: pruning      # none | quantization | pruning | kd | pruning+quantizat
 
 pruning:
   score_mode: wanda    # sum_l2 | first_l2 | wanda | random
+  num_calibration_batches: 128  # Only used for wanda score mode, ignored otherwise
   # CoNeTTE encoder (ConvNeXt blocks with hidden_dim=3072 or 1536)
   convnext_3072_threshold: 0.5   # 50% pruning
   convnext_1536_threshold: null  # null = skip
