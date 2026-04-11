@@ -266,7 +266,7 @@ def prune_conette(
     if score_mode is _UNSET:
         score_mode = config.pruning_score_mode
     if num_calibration_batches is _UNSET:
-        num_calibration_batches = config.pruning_calibration_batches
+        num_calibration_batches = config.num_calibration_batches
     print(
         f"Pruning with score mode: {score_mode}, decoder_threshold={decoder_threshold}, convnext_3072_threshold={convnext_3072_threshold}, convnext_1536_threshold={convnext_1536_threshold}  "
     )

@@ -71,7 +71,7 @@ def load_model(
             )
             num_calibration_batches = (
                 kd_config["pruning"].get("num_calibration_batches")
-                or config.pruning_calibration_batches
+                or config.num_calibration_batches
             )
             model, _ = prune_conette(
                 model,
