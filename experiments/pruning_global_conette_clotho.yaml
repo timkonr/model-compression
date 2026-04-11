@@ -11,7 +11,7 @@ seed: 42
 technique: pruning
 
 pruning:
-  score_mode: sum_l2       # sum_l2 | wanda
+  score_mode: wanda       # sum_l2 | wanda
   global_pruning_ratio: 0.3  # fraction of ALL encoder neurons to remove globally
   decoder_threshold: null    # decoder excluded from global pruning (different scale)
   convnext_3072_threshold: null  # must be null when using global_pruning_ratio
