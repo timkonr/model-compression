@@ -63,7 +63,9 @@ def kd_loss(student_logits, teacher_logits, targets, pad_idx: int):
     )
 
 
-def train_step(student_plm, teacher_plm, batch, mode="pure_kd"):
+def train_step(
+    student_plm, teacher_plm, batch, teacher_audio_batch=None, mode="pure_kd"
+):
     """
     KD training step supporting two modes:
 
@@ -73,6 +75,12 @@ def train_step(student_plm, teacher_plm, batch, mode="pure_kd"):
                  alpha_dyn = L_CE / L_KD (per-batch, keeps both terms equal magnitude).
 
     CE is always computed for monitoring, even in pure_kd mode.
+
+    teacher_audio_batch: dict with "audio" and "audio_shape" from the teacher's own
+    (unpruned) ConvNeXt preprocessor. If None, falls back to student's audio features —
+    but this means the teacher never uses its own encoder, which limits encoder recovery.
+    Passing teacher_audio_batch is the correct setup for full KD recovery.
+
     Returns: (loss, loss_ce, loss_kd, alpha_dyn)  — alpha_dyn=0 for pure_kd.
     """
     audio, audio_shape = batch["audio"], batch["audio_shape"]
@@ -83,7 +91,13 @@ def train_step(student_plm, teacher_plm, batch, mode="pure_kd"):
     loss_ce = student_plm.train_criterion(student_logits, caps_out)
 
     with torch.no_grad():
-        teacher_enc = teacher_plm.encode_audio(audio, audio_shape)
+        if teacher_audio_batch is not None:
+            # Teacher uses its own (unpruned) ConvNeXt output → stronger guidance signal
+            t_audio = teacher_audio_batch["audio"].to(audio.device)
+            t_audio_shape = teacher_audio_batch["audio_shape"].to(audio_shape.device)
+        else:
+            t_audio, t_audio_shape = audio, audio_shape
+        teacher_enc = teacher_plm.encode_audio(t_audio, t_audio_shape)
         teacher_logits = teacher_plm.decode_audio(
             teacher_enc, "forcing", caps_in=caps_in
         )
@@ -195,11 +209,22 @@ def train(
         for step, raw_batch in enumerate(train_loader):
             batch = prepare_batch(student, raw_batch, dataset_name)
 
+            # Teacher runs its own (unpruned) ConvNeXt on the raw audio.
+            # The ConvNeXt is in the preprocessor (PLM uses FrameIdentEncoder).
+            # Without this, both teacher and student would share the student's
+            # degraded (pruned) audio features — the teacher could not guide
+            # encoder recovery.
+            with torch.no_grad():
+                t_audio_batch = teacher.preprocessor(
+                    raw_batch["audio"], raw_batch["sr"]
+                )
+
             with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                 loss, loss_ce, loss_kd, alpha_dyn = train_step(
                     student.model,
                     teacher.model,
                     batch,
+                    teacher_audio_batch=t_audio_batch,
                     mode=mode,
                 )
 
@@ -232,21 +257,27 @@ def train(
         )
 
         # Validation
-        monitor = avg_loss
+        monitor = avg_loss  # fallback if no val set
         if val_loader is not None:
             student.eval()
-            val_loss, n_val = 0.0, 0
+            val_loss_sum, n_val = 0.0, 0
             with torch.no_grad():
                 for raw_batch in val_loader:
                     batch = prepare_batch(student, raw_batch, dataset_name)
-                    loss, _, _, _ = train_step(
-                        student.model, teacher.model, batch, mode=mode
+                    t_audio_batch = teacher.preprocessor(
+                        raw_batch["audio"], raw_batch["sr"]
                     )
-                    val_loss += loss.item()
+                    loss, _, _, _ = train_step(
+                        student.model,
+                        teacher.model,
+                        batch,
+                        teacher_audio_batch=t_audio_batch,
+                        mode=mode,
+                    )
+                    val_loss_sum += loss.item()
                     n_val += 1
-            monitor = val_loss / max(n_val, 1)
-            print(f"  val_loss={monitor:.4f}")
-
+            monitor = val_loss_sum / max(n_val, 1)
+            print(f"  val_kd_loss={monitor:.4f}")
         if monitor < best_val_loss:
             best_val_loss = monitor
             epochs_no_improve = 0
@@ -254,7 +285,7 @@ def train(
             os.makedirs(best_path, exist_ok=True)
             # Save only the state dict — the config does not reflect pruned dimensions,
             # so from_pretrained would cause shape mismatches on reload.
-            # Loading requires: prune_conette() first, then load_state_dict().
+            # Loading requires: rebuild_conette_from_dims() first, then load_state_dict().
             torch.save(
                 student.state_dict(), os.path.join(best_path, "pytorch_model.bin")
             )
@@ -282,7 +313,7 @@ def train(
                     f,
                     indent=2,
                 )
-            print(f"  => New best saved (loss={monitor:.4f})")
+            print(f"  => New best saved (val_loss={monitor:.4f})")
         else:
             epochs_no_improve += 1
             print(f"  No improvement ({epochs_no_improve}/{patience})")
