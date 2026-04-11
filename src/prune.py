@@ -122,123 +122,83 @@ def apply_linear_pair_pruning(
     return new_first, new_second
 
 
-def compute_layer_importance(
-    scores: torch.Tensor,
-) -> float:
-    """
-    Scalar importance for one layer.
-
-    We use the mean neuron score so that the layer score reflects
-    average neuron importance rather than just layer width.
-    """
-    return float(scores.mean().item())
-
-
-def allocate_layerwise_keep_counts(
+def allocate_layerwise_keep_indices(
     layer_infos: list[dict],
     global_pruning_ratio: float,
-) -> list[int]:
+) -> list[torch.Tensor]:
     """
-    Allocate a global pruning budget across heterogeneous layers.
+    Global pruning with cost-weighted greedy neuron selection.
 
-    Instead of comparing raw neuron scores across layers directly, we:
-      1) compute a layer importance
-      2) account for layer size / per-neuron cost
-      3) distribute the total kept parameter budget across layers
-      4) convert the kept parameter budget back into kept neuron counts
+    Problem with naive global ranking across heterogeneous layers:
+    CoNeTTE has hidden dims 384 / 768 / 1536 / 3072. A 3072-neuron costs ~8×
+    more parameters than a 384-neuron. A simple normalized-score threshold
+    ignores this: cheap unimportant neurons in small layers survive while
+    expensive neurons in large layers are removed — the 3072 layers end up
+    under-pruned even at high global ratios.
+
+    Solution — cost-weighted value/cost selection:
+      value(neuron) = importance score normalized to [0,1] within its layer
+                      (per-layer normalization removes cross-layer magnitude bias)
+      cost(neuron)  = neuron_cost (params removed if this neuron is pruned)
+
+    Neurons are sorted ascending by value/cost. We greedily remove the
+    least-value-per-parameter neurons until the target parameter removal is met.
+    A 3072-neuron must be ~8× more important per activation unit than a 384-neuron
+    to justify keeping it — correctly reflecting its parameter cost.
 
     Each entry in layer_infos must contain:
-      - "scores": 1-D tensor of neuron scores
-      - "neuron_cost": params removed when one hidden neuron is removed
-      - "num_neurons": number of hidden neurons in the layer
+      - "scores":      1-D importance tensor (higher = more important)
+      - "neuron_cost": parameters removed when one hidden neuron is pruned
+      - "num_neurons": hidden dimension of this layer
 
     Returns:
-        keep_counts: number of neurons to keep per layer (same order)
+        keep_indices: list of keep-index tensors, one per layer (same order)
     """
     if not (0.0 <= global_pruning_ratio < 1.0):
         raise ValueError(
             f"global_pruning_ratio must be in [0, 1), got {global_pruning_ratio}"
         )
 
-    # Total prunable parameter budget
-    total_prunable_params = 0
-    for info in layer_infos:
-        total_prunable_params += info["num_neurons"] * info["neuron_cost"]
-
-    target_keep_params = int(
-        round(total_prunable_params * (1.0 - global_pruning_ratio))
+    total_params = sum(
+        info["num_neurons"] * info["neuron_cost"] for info in layer_infos
     )
-    target_keep_params = max(
-        len(layer_infos), min(target_keep_params, total_prunable_params)
-    )
+    target_remove_params = int(round(total_params * global_pruning_ratio))
 
-    # Layer mass = layer importance * layer total size
-    # This favors layers that are both important and large.
-    masses = []
-    for info in layer_infos:
-        layer_importance = compute_layer_importance(info["scores"])
-        masses.append(layer_importance)
+    # Build flat list of all neurons: (value_per_cost, layer_idx, neuron_idx)
+    all_neurons = []
+    for li, info in enumerate(layer_infos):
+        scores = info["scores"]
+        norm_scores = scores / (scores.max() + 1e-12)  # [0, 1] within this layer
+        cost = info["neuron_cost"]
+        for ni in range(len(scores)):
+            all_neurons.append((norm_scores[ni].item() / cost, li, ni))
 
-    mass_sum = sum(masses)
-    if mass_sum <= 0:
-        masses = [1.0 for _ in layer_infos]
-        mass_sum = float(len(layer_infos))
+    # Sort ascending: least value-per-cost first → prune these
+    all_neurons.sort(key=lambda x: x[0])
 
-    # Initial allocation in "kept params"
-    keep_params_alloc = []
-    for info, mass in zip(layer_infos, masses):
-        alloc = target_keep_params * (mass / mass_sum)
+    # Greedy removal until parameter budget is met
+    remove_mask = {
+        li: torch.zeros(info["num_neurons"], dtype=torch.bool)
+        for li, info in enumerate(layer_infos)
+    }
+    removed_params = 0
+    for value_per_cost, li, ni in all_neurons:
+        if removed_params >= target_remove_params:
+            break
+        cost = layer_infos[li]["neuron_cost"]
+        if removed_params + cost <= target_remove_params:
+            remove_mask[li][ni] = True
+            removed_params += cost
 
-        # At least one neuron per layer
-        min_params = info["neuron_cost"]
-        max_params = info["num_neurons"] * info["neuron_cost"]
-        alloc = max(min_params, min(int(round(alloc)), max_params))
-        keep_params_alloc.append(alloc)
+    # Convert remove masks to keep indices; guarantee at least 1 neuron per layer
+    keep_indices = []
+    for li, info in enumerate(layer_infos):
+        keep_idx = (~remove_mask[li]).nonzero(as_tuple=True)[0]
+        if len(keep_idx) == 0:
+            keep_idx = info["scores"].argmax().unsqueeze(0)
+        keep_indices.append(keep_idx)
 
-    # Convert param allocation -> neuron counts
-    keep_counts = []
-    for info, keep_params in zip(layer_infos, keep_params_alloc):
-        k = int(round(keep_params / info["neuron_cost"]))
-        k = max(1, min(k, info["num_neurons"]))
-        keep_counts.append(k)
-
-    # Fix rounding mismatch against global target in neuron-cost space
-    current_keep_params = sum(
-        k * info["neuron_cost"] for k, info in zip(keep_counts, layer_infos)
-    )
-
-    if current_keep_params > target_keep_params:
-        # remove neurons from least important layers first
-        order = sorted(
-            range(len(layer_infos)),
-            key=lambda i: compute_layer_importance(layer_infos[i]["scores"]),
-        )
-        for i in order:
-            while (
-                keep_counts[i] > 1
-                and current_keep_params - layer_infos[i]["neuron_cost"]
-                >= target_keep_params
-            ):
-                keep_counts[i] -= 1
-                current_keep_params -= layer_infos[i]["neuron_cost"]
-
-    elif current_keep_params < target_keep_params:
-        # add neurons to most important layers first
-        order = sorted(
-            range(len(layer_infos)),
-            key=lambda i: compute_layer_importance(layer_infos[i]["scores"]),
-            reverse=True,
-        )
-        for i in order:
-            while (
-                keep_counts[i] < layer_infos[i]["num_neurons"]
-                and current_keep_params + layer_infos[i]["neuron_cost"]
-                <= target_keep_params
-            ):
-                keep_counts[i] += 1
-                current_keep_params += layer_infos[i]["neuron_cost"]
-
-    return keep_counts
+    return keep_indices
 
 
 class ActivationCollector:
@@ -497,9 +457,11 @@ def prune_conette(
                 }
             )
 
-        keep_counts = allocate_layerwise_keep_counts(layer_infos, global_pruning_ratio)
+        keep_indices = allocate_layerwise_keep_indices(
+            layer_infos, global_pruning_ratio
+        )
 
-        for info, k in zip(layer_infos, keep_counts):
+        for info, keep_idx in zip(layer_infos, keep_indices):
             stage_idx = info["stage_idx"]
             block_idx = info["block_idx"]
             block = info["block"]
@@ -507,7 +469,6 @@ def prune_conette(
             scores = info["scores"]
             old_hidden = info["num_neurons"]
 
-            keep_idx = torch.topk(scores, k=k, largest=True).indices
             new_pw1, new_pw2 = apply_linear_pair_pruning(
                 block.pwconv1,
                 block.pwconv2,
@@ -521,13 +482,11 @@ def prune_conette(
             pruned_layer_names.add(f"{base_name}.pwconv2")
 
             if verbose:
-                layer_importance = compute_layer_importance(scores)
+                k = len(keep_idx)
                 print(
                     f"[ConvNeXt stage {stage_idx} block {block_idx}] "
                     f"hidden dim: {old_hidden} -> {new_pw1.out_features} "
-                    f"(kept {k}/{old_hidden}, "
-                    f"layer_importance={layer_importance:.4f}, "
-                    f"neuron_cost={info['neuron_cost']})"
+                    f"(kept {k}/{old_hidden}, neuron_cost={info['neuron_cost']})"
                 )
 
     elif convnext_3072_threshold is not None or convnext_1536_threshold is not None:
