@@ -250,8 +250,9 @@ def rebuild_conette_from_dims(
             d_out = block.pwconv2.out_features
             has_bias1 = block.pwconv1.bias is not None
             has_bias2 = block.pwconv2.bias is not None
-            block.pwconv1 = nn.Linear(d_in, target_k, bias=has_bias1)
-            block.pwconv2 = nn.Linear(target_k, d_out, bias=has_bias2)
+            dev, dt = block.pwconv1.weight.device, block.pwconv1.weight.dtype
+            block.pwconv1 = nn.Linear(d_in, target_k, bias=has_bias1).to(device=dev, dtype=dt)
+            block.pwconv2 = nn.Linear(target_k, d_out, bias=has_bias2).to(device=dev, dtype=dt)
             if verbose:
                 print(f"[Rebuild] {key}: hidden dim set to {target_k}")
 
@@ -266,8 +267,9 @@ def rebuild_conette_from_dims(
         d_out = layer.linear2.out_features
         has_bias1 = layer.linear1.bias is not None
         has_bias2 = layer.linear2.bias is not None
-        layer.linear1 = nn.Linear(d_in, target_k, bias=has_bias1)
-        layer.linear2 = nn.Linear(target_k, d_out, bias=has_bias2)
+        dev, dt = layer.linear1.weight.device, layer.linear1.weight.dtype
+        layer.linear1 = nn.Linear(d_in, target_k, bias=has_bias1).to(device=dev, dtype=dt)
+        layer.linear2 = nn.Linear(target_k, d_out, bias=has_bias2).to(device=dev, dtype=dt)
         if verbose:
             print(f"[Rebuild] {key}: hidden dim set to {target_k}")
 
