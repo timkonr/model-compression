@@ -24,7 +24,7 @@ from conette import CoNeTTEConfig, CoNeTTEModel
 from torch.utils.data import DataLoader
 
 from finetune import prepare_batch
-from prune import prune_conette
+from prune import get_conette_hidden_dims, prune_conette
 from utils import config
 
 
@@ -33,17 +33,33 @@ from utils import config
 # ---------------------------------------------------------------------------
 
 
-def kd_loss(student_logits, teacher_logits):
+def kd_loss(student_logits, teacher_logits, targets, pad_idx: int):
     """
     Logit-based KD loss (Hinton et al., 2015) with τ=1.0 (no temperature scaling).
     Following Minitron (Muralidharan et al., 2024): τ=1.0, KLD loss.
-    Logits shape: (B, V, T) — permuted to (B*T, V) for per-token KL divergence.
+
+    Computes KD only on non-padding target positions.
+
+    Logits shape:  (B, V, T)
+    Targets shape: (B, T)
     """
     B, V, T = student_logits.shape
-    s = student_logits.permute(0, 2, 1).reshape(-1, V)
-    t = teacher_logits.permute(0, 2, 1).reshape(-1, V)
+
+    s = student_logits.permute(0, 2, 1).reshape(-1, V)  # (B*T, V)
+    t = teacher_logits.permute(0, 2, 1).reshape(-1, V)  # (B*T, V)
+    y = targets.reshape(-1)  # (B*T,)
+
+    valid = y != pad_idx
+    if not valid.any():
+        return s.new_tensor(0.0)
+
+    s = s[valid]
+    t = t[valid]
+
     return F.kl_div(
-        F.log_softmax(s, dim=-1), F.softmax(t, dim=-1), reduction="batchmean"
+        F.log_softmax(s, dim=-1),
+        F.softmax(t, dim=-1),
+        reduction="batchmean",
     )
 
 
@@ -72,7 +88,8 @@ def train_step(student_plm, teacher_plm, batch, mode="pure_kd"):
             teacher_enc, "forcing", caps_in=caps_in
         )
 
-    loss_kd = kd_loss(student_logits, teacher_logits)
+    pad_idx = student_plm.tokenizer.pad_token_id
+    loss_kd = kd_loss(student_logits, teacher_logits, caps_out, pad_idx)
 
     if mode == "pure_kd":
         loss = loss_kd
