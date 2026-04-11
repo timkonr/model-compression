@@ -177,9 +177,7 @@ def allocate_layerwise_keep_counts(
     masses = []
     for info in layer_infos:
         layer_importance = compute_layer_importance(info["scores"])
-        layer_total_params = info["num_neurons"] * info["neuron_cost"]
-        mass = layer_importance * layer_total_params
-        masses.append(mass)
+        masses.append(layer_importance)
 
     mass_sum = sum(masses)
     if mass_sum <= 0:
