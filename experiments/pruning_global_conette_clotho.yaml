@@ -1,0 +1,25 @@
+# Global pruning of CoNeTTE encoder on Clotho (Minitron-style)
+# All encoder MLP neurons are ranked globally; least important removed until
+# global_pruning_ratio of total neurons is removed.
+# Per-layer max-normalization ensures cross-layer comparability.
+# Run with: mc-run --config experiments/pruning_global_conette_clotho.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: pruning
+
+pruning:
+  score_mode: sum_l2       # sum_l2 | wanda
+  global_pruning_ratio: 0.3  # fraction of ALL encoder neurons to remove globally
+  decoder_threshold: null    # decoder excluded from global pruning (different scale)
+  convnext_3072_threshold: null  # must be null when using global_pruning_ratio
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

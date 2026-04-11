@@ -63,41 +63,44 @@ def prune_linear_pair(
     threshold: float,
     score_mode: str = "sum_l2",
     activation_scores: Optional[torch.Tensor] = None,
-) -> tuple[nn.Linear, nn.Linear, torch.Tensor, float]:
+) -> tuple[nn.Linear, nn.Linear]:
     """
-    Structured pruning of an MLP pair:
+    Local pruning of an MLP pair: keep top-`threshold` fraction of hidden neurons
+    ranked by their within-layer importance score.
 
       first : Linear(d_in, d_hidden)
       second: Linear(d_hidden, d_out)
-
-    Removes hidden neurons consistently in both layers.
-
-    Returns:
-      new_first, new_second, scores
     """
     d_hidden = first.out_features
-    d_in = first.in_features
-    d_out = second.out_features
-
     if second.in_features != d_hidden:
         raise RuntimeError(
             f"Incompatible pair: first.out={d_hidden}, second.in={second.in_features}"
         )
-
     threshold = max(0.0, min(1.0, float(threshold)))
-
     scores = compute_linear_hidden_scores(
         first,
         second,
         mode=score_mode,
         activation_scores=activation_scores,
     )
-
-    k = int(round(d_hidden * threshold))
-    k = max(1, min(k, d_hidden))
-
+    k = max(1, min(int(round(d_hidden * threshold)), d_hidden))
     keep_idx = torch.topk(scores, k=k, largest=True).indices
+    return apply_linear_pair_pruning(first, second, keep_idx)
+
+
+@torch.no_grad()
+def apply_linear_pair_pruning(
+    first: nn.Linear,
+    second: nn.Linear,
+    keep_idx: torch.Tensor,
+) -> tuple[nn.Linear, nn.Linear]:
+    """
+    Apply structured pruning to an MLP pair given explicit keep indices.
+    Separated from score computation so global pruning can supply indices directly.
+    """
+    k = len(keep_idx)
     keep_idx, _ = torch.sort(keep_idx)
+    d_in, d_out = first.in_features, second.out_features
 
     new_first = nn.Linear(d_in, k, bias=(first.bias is not None)).to(
         device=first.weight.device,
@@ -117,6 +120,61 @@ def prune_linear_pair(
         new_second.bias.copy_(second.bias)
 
     return new_first, new_second
+
+
+@torch.no_grad()
+def compute_global_keep_indices(
+    layer_scores: list[torch.Tensor],
+    global_pruning_ratio: float,
+) -> list[torch.Tensor]:
+    """
+    Global pruning (Minitron-style): rank all neurons across all layers jointly
+    and remove the globally least important ones.
+
+    Each layer's scores are max-normalized to [0, 1] before pooling so that
+    cross-layer comparison is on a common scale — a score of 1.0 always means
+    "best neuron in this layer", regardless of absolute weight/activation magnitude.
+
+    Args:
+        layer_scores: list of 1-D importance tensors, one per prunable layer.
+        global_pruning_ratio: fraction of ALL neurons to remove (0–1).
+
+    Returns:
+        list of keep-index tensors, one per layer (same order as input).
+    """
+    if not (0.0 <= global_pruning_ratio < 1.0):
+        raise ValueError(
+            f"global_pruning_ratio must be in [0, 1), got {global_pruning_ratio}"
+        )
+
+    # Normalize each layer's scores to [0, 1] by dividing by per-layer max.
+    # This makes the scores dimensionless and comparable across layers.
+    normalized = []
+    for scores in layer_scores:
+        max_val = scores.max()
+        normalized.append(scores / (max_val + 1e-12))
+
+    # Pool all normalized scores with their layer assignment
+    all_scores = torch.cat(normalized)
+    total_neurons = all_scores.numel()
+    n_remove = int(round(total_neurons * global_pruning_ratio))
+    n_keep = max(1, total_neurons - n_remove)
+
+    # Global threshold: the score of the n_keep-th largest neuron
+    global_threshold = torch.topk(all_scores, k=n_keep, largest=True).values[-1]
+
+    # Per layer: keep neurons whose normalized score is >= global threshold
+    keep_indices = []
+    layer_offset = 0
+    for norm_scores in normalized:
+        layer_keep = (norm_scores >= global_threshold).nonzero(as_tuple=True)[0]
+        # guarantee at least one neuron per layer
+        if len(layer_keep) == 0:
+            layer_keep = torch.argmax(norm_scores).unsqueeze(0)
+        keep_indices.append(layer_keep)
+        layer_offset += len(norm_scores)
+
+    return keep_indices
 
 
 class ActivationCollector:
@@ -245,17 +303,22 @@ def prune_conette(
     decoder_threshold: Optional[float] = _UNSET,
     convnext_3072_threshold: Optional[float] = _UNSET,
     convnext_1536_threshold: Optional[float] = _UNSET,
+    global_pruning_ratio: Optional[float] = _UNSET,
     score_mode: str = _UNSET,
     num_calibration_batches: int = _UNSET,
     verbose: bool = True,
     loader: torch.utils.data.DataLoader = None,
 ):
     """
-    Prune CoNeTTE MLP blocks:
-      - decoder: linear1 / linear2
-      - encoder: pwconv1 / pwconv2
+    Prune CoNeTTE MLP blocks (encoder pwconv pairs + decoder linear pairs).
 
-    Set a threshold to None to skip that part.
+    Two modes:
+      - Local (default): each layer type gets the same keep-ratio threshold.
+        Set decoder_threshold / convnext_*_threshold; None = skip that component.
+      - Global: rank all neurons across all layers jointly, remove the globally
+        least important ones. Set global_pruning_ratio (fraction to remove).
+        Requires score_mode != "random" to be meaningful.
+        Decoder is excluded from global pruning (different function, different scale).
     """
     if decoder_threshold is _UNSET:
         decoder_threshold = config.decoder_threshold
@@ -263,15 +326,14 @@ def prune_conette(
         convnext_3072_threshold = config.convnext_3072_threshold
     if convnext_1536_threshold is _UNSET:
         convnext_1536_threshold = config.convnext_1536_threshold
+    if global_pruning_ratio is _UNSET:
+        global_pruning_ratio = getattr(config, "global_pruning_ratio", None)
     if score_mode is _UNSET:
         score_mode = config.pruning_score_mode
     if num_calibration_batches is _UNSET:
         num_calibration_batches = config.num_calibration_batches
-    print(
-        f"Pruning with score mode: {score_mode}, decoder_threshold={decoder_threshold}, convnext_3072_threshold={convnext_3072_threshold}, convnext_1536_threshold={convnext_1536_threshold}  "
-    )
-    model.eval()
 
+    model.eval()
     pruned_layer_names = set()
 
     activation_scores = None
@@ -283,88 +345,135 @@ def prune_conette(
         )
 
     # -------------------------
-    # 1) Decoder pruning
+    # 1) Decoder pruning (always local — different scale from encoder)
     # -------------------------
     if decoder_threshold is not None:
         dec = model.model.decoder
         for li, layer in enumerate(dec.layers):
             old_hidden = layer.linear1.out_features
-
             new_fc1, new_fc2 = prune_linear_pair(
                 layer.linear1,
                 layer.linear2,
                 threshold=decoder_threshold,
                 score_mode="sum_l2",
             )
-
             layer.linear1 = new_fc1
             layer.linear2 = new_fc2
-
             pruned_layer_names.add(f"model.decoder.layers.{li}.linear1")
             pruned_layer_names.add(f"model.decoder.layers.{li}.linear2")
-
             if verbose:
                 print(
-                    f"[Decoder layer {li}] hidden dim: "
-                    f"{old_hidden} -> {new_fc1.out_features}"
+                    f"[Decoder layer {li}] hidden dim: {old_hidden} -> {new_fc1.out_features}"
                 )
 
     # -------------------------
     # 2) Encoder pruning
     # -------------------------
-    if convnext_3072_threshold is not None or convnext_1536_threshold is not None:
-        for stage_idx, stage in enumerate(model.preprocessor.encoder.stages):
-            for block_idx, block in enumerate(stage):
-                if not (hasattr(block, "pwconv1") and hasattr(block, "pwconv2")):
-                    continue
+    # Collect eligible encoder blocks
+    enc_blocks = []  # (stage_idx, block_idx, block, base_name)
+    for stage_idx, stage in enumerate(model.preprocessor.encoder.stages):
+        for block_idx, block in enumerate(stage):
+            if not (hasattr(block, "pwconv1") and hasattr(block, "pwconv2")):
+                continue
+            if not isinstance(block.pwconv1, nn.Linear) or not isinstance(
+                block.pwconv2, nn.Linear
+            ):
+                continue
+            enc_blocks.append(
+                (
+                    stage_idx,
+                    block_idx,
+                    block,
+                    f"preprocessor.encoder.stages.{stage_idx}.{block_idx}",
+                )
+            )
 
-                pw1 = block.pwconv1
-                pw2 = block.pwconv2
+    if global_pruning_ratio is not None:
+        # ── Global mode (Minitron-style) ──────────────────────────────────────
+        # Step 1: compute per-layer scores for all encoder blocks
+        print(
+            f"[Encoder] Global pruning | ratio={global_pruning_ratio} | score_mode={score_mode}"
+        )
+        layer_scores = []
+        for stage_idx, block_idx, block, base_name in enc_blocks:
+            act = (
+                activation_scores.get(f"{base_name}.pwconv1")
+                if activation_scores
+                else None
+            )
+            if act is not None:
+                act = act.to(
+                    device=block.pwconv1.weight.device, dtype=block.pwconv1.weight.dtype
+                )
+            scores = compute_linear_hidden_scores(
+                block.pwconv1, block.pwconv2, mode=score_mode, activation_scores=act
+            )
+            layer_scores.append(scores)
 
-                if not isinstance(pw1, nn.Linear) or not isinstance(pw2, nn.Linear):
-                    continue
+        # Step 2: global ranking with per-layer max-normalization
+        keep_indices = compute_global_keep_indices(layer_scores, global_pruning_ratio)
 
-                old_hidden = pw1.out_features
-                threshold = None
-
-                if old_hidden == 1536 and convnext_1536_threshold is not None:
-                    threshold = convnext_1536_threshold
-                elif old_hidden == 3072 and convnext_3072_threshold is not None:
-                    threshold = convnext_3072_threshold
-
-                if threshold is None:
-                    continue
-
-                base_name = f"preprocessor.encoder.stages.{stage_idx}.{block_idx}"
-                block_activation_scores = None
-
-                if activation_scores is not None:
-                    act_name = f"{base_name}.pwconv1"
-                    if act_name in activation_scores:
-                        block_activation_scores = activation_scores[act_name].to(
-                            device=pw1.weight.device,
-                            dtype=pw1.weight.dtype,
-                        )
-
-                new_pw1, new_pw2 = prune_linear_pair(
-                    pw1,
-                    pw2,
-                    threshold=threshold,
-                    score_mode=score_mode,
-                    activation_scores=block_activation_scores,
+        # Step 3: apply per layer
+        for (stage_idx, block_idx, block, base_name), keep_idx in zip(
+            enc_blocks, keep_indices
+        ):
+            old_hidden = block.pwconv1.out_features
+            new_pw1, new_pw2 = apply_linear_pair_pruning(
+                block.pwconv1, block.pwconv2, keep_idx
+            )
+            block.pwconv1 = new_pw1
+            block.pwconv2 = new_pw2
+            pruned_layer_names.add(f"{base_name}.pwconv1")
+            pruned_layer_names.add(f"{base_name}.pwconv2")
+            if verbose:
+                print(
+                    f"[ConvNeXt stage {stage_idx} block {block_idx}] "
+                    f"hidden dim: {old_hidden} -> {new_pw1.out_features} "
+                    f"(kept {len(keep_idx)}/{old_hidden})"
                 )
 
-                block.pwconv1 = new_pw1
-                block.pwconv2 = new_pw2
+    elif convnext_3072_threshold is not None or convnext_1536_threshold is not None:
+        # ── Local mode: same threshold per layer type ─────────────────────────
+        print(
+            f"[Encoder] Local pruning | 3072_threshold={convnext_3072_threshold} "
+            f"1536_threshold={convnext_1536_threshold} | score_mode={score_mode}"
+        )
+        for stage_idx, block_idx, block, base_name in enc_blocks:
+            old_hidden = block.pwconv1.out_features
+            if old_hidden == 1536 and convnext_1536_threshold is not None:
+                threshold = convnext_1536_threshold
+            elif old_hidden == 3072 and convnext_3072_threshold is not None:
+                threshold = convnext_3072_threshold
+            else:
+                continue
 
-                pruned_layer_names.add(f"{base_name}.pwconv1")
-                pruned_layer_names.add(f"{base_name}.pwconv2")
+            act = (
+                activation_scores.get(f"{base_name}.pwconv1")
+                if activation_scores
+                else None
+            )
+            if act is not None:
+                act = act.to(
+                    device=block.pwconv1.weight.device, dtype=block.pwconv1.weight.dtype
+                )
 
-                if verbose:
-                    print(
-                        f"[ConvNeXt stage {stage_idx} block {block_idx}] hidden dim: "
-                        f"{old_hidden} -> {new_pw1.out_features}"
-                    )
+            new_pw1, new_pw2 = prune_linear_pair(
+                block.pwconv1,
+                block.pwconv2,
+                threshold=threshold,
+                score_mode=score_mode,
+                activation_scores=act,
+            )
+            block.pwconv1 = new_pw1
+            block.pwconv2 = new_pw2
+            pruned_layer_names.add(f"{base_name}.pwconv1")
+            pruned_layer_names.add(f"{base_name}.pwconv2")
+            if verbose:
+                print(
+                    f"[ConvNeXt stage {stage_idx} block {block_idx}] "
+                    f"hidden dim: {old_hidden} -> {new_pw1.out_features}"
+                )
+
     return model, pruned_layer_names
 
 

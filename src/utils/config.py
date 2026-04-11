@@ -34,6 +34,7 @@ num_calibration_batches = 128  # Number of batches to use for collecting activat
 decoder_threshold = None
 convnext_3072_threshold = 0.075
 convnext_1536_threshold = None
+global_pruning_ratio = None  # if set: global pruning mode (overrides convnext thresholds)
 
 ### clapcap
 gpt_threshold = None  # nach 6 stunden abgebrochen
@@ -127,6 +128,7 @@ def load_from_yaml(path: str) -> None:
         "decoder_threshold",
         "convnext_3072_threshold",
         "convnext_1536_threshold",
+        "global_pruning_ratio",
         "num_calibration_batches",
     ):
         if key in pruning_cfg:
