@@ -29,6 +29,7 @@ quantization_mode = "dynamic"  # dynamic | static
 ## pruning config
 pruning = False  # Inference on pruned model
 pruning_score_mode = "sum_l2"  # wanda (consider weights and activations) | sum_l2 (consider in and out strength) | first_l2 (consider only in strength)
+num_calibration_batches = 128  # Number of batches to use for collecting activation stats for pruning (only for wanda score mode)
 ### conette
 decoder_threshold = None
 convnext_3072_threshold = 0.075
@@ -47,10 +48,16 @@ kd_model = "best_student_model.pth"  # Path to kd model
 patience = 5
 num_epochs = 25
 batch_size = 32
-lr = 1e-5          # decoder + projection learning rate
-grad_accum_steps = 1  # gradient accumulation steps (effective_batch = batch_size * grad_accum_steps)
-lr_encoder = 1e-6  # encoder learning rate (lower to avoid overwriting pretrained features)
-kd_mode = "pure_kd"  # pure_kd (Minitron BP #5) | hybrid (Hinton: CE + dynamic_alpha * KD)
+lr = 1e-5  # decoder + projection learning rate
+grad_accum_steps = (
+    1  # gradient accumulation steps (effective_batch = batch_size * grad_accum_steps)
+)
+lr_encoder = (
+    1e-6  # encoder learning rate (lower to avoid overwriting pretrained features)
+)
+kd_mode = (
+    "pure_kd"  # pure_kd (Minitron BP #5) | hybrid (Hinton: CE + dynamic_alpha * KD)
+)
 kd_save_dir = "checkpoints/kd"
 
 ## reproducibility
@@ -120,6 +127,7 @@ def load_from_yaml(path: str) -> None:
         "decoder_threshold",
         "convnext_3072_threshold",
         "convnext_1536_threshold",
+        "num_calibration_batches",
     ):
         if key in pruning_cfg:
             g[key] = pruning_cfg[key]
@@ -144,7 +152,21 @@ def load_from_yaml(path: str) -> None:
     # KD options
     kd_cfg = cfg.get("kd", {})
     if isinstance(kd_cfg, dict):
-        for key in ("model_path", "num_epochs", "batch_size", "grad_accum_steps", "lr", "lr_encoder", "patience", "save_dir", "mode"):
-            config_key = {"model_path": "kd_model", "save_dir": "kd_save_dir", "mode": "kd_mode"}.get(key, key)
+        for key in (
+            "model_path",
+            "num_epochs",
+            "batch_size",
+            "grad_accum_steps",
+            "lr",
+            "lr_encoder",
+            "patience",
+            "save_dir",
+            "mode",
+        ):
+            config_key = {
+                "model_path": "kd_model",
+                "save_dir": "kd_save_dir",
+                "mode": "kd_mode",
+            }.get(key, key)
             if key in kd_cfg:
                 g[config_key] = kd_cfg[key]

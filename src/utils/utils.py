@@ -69,6 +69,10 @@ def load_model(
             score_mode = (
                 kd_config["pruning"].get("score_mode") or config.pruning_score_mode
             )
+            num_calibration_batches = (
+                kd_config["pruning"].get("num_calibration_batches")
+                or config.pruning_calibration_batches
+            )
             model, _ = prune_conette(
                 model,
                 verbose=True,
@@ -77,6 +81,7 @@ def load_model(
                 convnext_3072_threshold=convnext_3072_threshold,
                 convnext_1536_threshold=convnext_1536_threshold,
                 score_mode=score_mode,
+                num_calibration_batches=num_calibration_batches,
             )
         state_dict_path = os.path.join(kd_path, "pytorch_model.bin")
         if not os.path.exists(state_dict_path):
@@ -104,7 +109,7 @@ def load_model(
         print("pruning model using setup:")
         if config.baseline_model == "conette":
             print(
-                f"decoder_threshold: {config.decoder_threshold}, convnext_3072_threshold: {config.convnext_3072_threshold}, convnext_1536_threshold: {config.convnext_1536_threshold}, score_mode: {config.pruning_score_mode}"
+                f"decoder_threshold: {config.decoder_threshold}, convnext_3072_threshold: {config.convnext_3072_threshold}, convnext_1536_threshold: {config.convnext_1536_threshold}, score_mode: {config.pruning_score_mode}, num_calibration_batches: {config.num_calibration_batches}"
             )
         elif config.baseline_model == "clapcap":
             print(

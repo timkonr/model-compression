@@ -30,8 +30,17 @@ def merge(defaults: dict, experiment: dict) -> dict:
     return merged
 
 
-_CONETTE_PRUNING_KEYS = {"decoder_threshold", "convnext_3072_threshold", "convnext_1536_threshold"}
-_CLAPCAP_PRUNING_KEYS = {"gpt_threshold", "mapper_threshold", "htsat_threshold", "htsat_min_hidden_dim"}
+_CONETTE_PRUNING_KEYS = {
+    "decoder_threshold",
+    "convnext_3072_threshold",
+    "convnext_1536_threshold",
+}
+_CLAPCAP_PRUNING_KEYS = {
+    "gpt_threshold",
+    "mapper_threshold",
+    "htsat_threshold",
+    "htsat_min_hidden_dim",
+}
 
 
 def _label(cfg: dict) -> str:
@@ -44,8 +53,14 @@ def _print_header(cfg: dict):
     pruning_cfg = cfg.get("pruning") or {}
     if cfg.get("technique") == "pruning" and pruning_cfg:
         model = cfg.get("model", "")
-        relevant_keys = _CONETTE_PRUNING_KEYS if model == "conette" else _CLAPCAP_PRUNING_KEYS
+        relevant_keys = (
+            _CONETTE_PRUNING_KEYS if model == "conette" else _CLAPCAP_PRUNING_KEYS
+        )
         print(f"  score_mode: {pruning_cfg.get('score_mode', '?')}")
+        if pruning_cfg.get("score_mode") == "wanda":
+            print(
+                f"  num_calibration_batches: {pruning_cfg.get('num_calibration_batches', '?')}"
+            )
         for k, v in pruning_cfg.items():
             if k in relevant_keys and v is not None:
                 print(f"  {k}: {v}")

@@ -194,6 +194,7 @@ def perform_inference(verbose):
                 "convnext_3072_threshold": config.convnext_3072_threshold,
                 "convnext_1536_threshold": config.convnext_1536_threshold,
                 "score_mode": config.pruning_score_mode,
+                "num_calibration_batches": config.num_calibration_batches,
             }
         elif config.baseline_model == "clapcap":
             metadata["pruning_setup"] = {

@@ -246,6 +246,7 @@ def prune_conette(
     convnext_3072_threshold: Optional[float] = _UNSET,
     convnext_1536_threshold: Optional[float] = _UNSET,
     score_mode: str = _UNSET,
+    num_calibration_batches: int = _UNSET,
     verbose: bool = True,
     loader: torch.utils.data.DataLoader = None,
 ):
@@ -264,6 +265,8 @@ def prune_conette(
         convnext_1536_threshold = config.convnext_1536_threshold
     if score_mode is _UNSET:
         score_mode = config.pruning_score_mode
+    if num_calibration_batches is _UNSET:
+        num_calibration_batches = config.pruning_calibration_batches
     print(
         f"Pruning with score mode: {score_mode}, decoder_threshold={decoder_threshold}, convnext_3072_threshold={convnext_3072_threshold}, convnext_1536_threshold={convnext_1536_threshold}  "
     )
@@ -276,7 +279,7 @@ def prune_conette(
         activation_scores = collect_conette_encoder_activation_scores(
             model,
             loader=loader,
-            num_batches=1024,  # following Minitron (Muralidharan et al., 2024)
+            num_batches=num_calibration_batches,
         )
 
     # -------------------------
