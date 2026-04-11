@@ -122,59 +122,125 @@ def apply_linear_pair_pruning(
     return new_first, new_second
 
 
-@torch.no_grad()
-def compute_global_keep_indices(
-    layer_scores: list[torch.Tensor],
-    global_pruning_ratio: float,
-) -> list[torch.Tensor]:
+def compute_layer_importance(
+    scores: torch.Tensor,
+) -> float:
     """
-    Global pruning (Minitron-style): rank all neurons across all layers jointly
-    and remove the globally least important ones.
+    Scalar importance for one layer.
 
-    Each layer's scores are max-normalized to [0, 1] before pooling so that
-    cross-layer comparison is on a common scale — a score of 1.0 always means
-    "best neuron in this layer", regardless of absolute weight/activation magnitude.
+    We use the mean neuron score so that the layer score reflects
+    average neuron importance rather than just layer width.
+    """
+    return float(scores.mean().item())
 
-    Args:
-        layer_scores: list of 1-D importance tensors, one per prunable layer.
-        global_pruning_ratio: fraction of ALL neurons to remove (0–1).
+
+def allocate_layerwise_keep_counts(
+    layer_infos: list[dict],
+    global_pruning_ratio: float,
+) -> list[int]:
+    """
+    Allocate a global pruning budget across heterogeneous layers.
+
+    Instead of comparing raw neuron scores across layers directly, we:
+      1) compute a layer importance
+      2) account for layer size / per-neuron cost
+      3) distribute the total kept parameter budget across layers
+      4) convert the kept parameter budget back into kept neuron counts
+
+    Each entry in layer_infos must contain:
+      - "scores": 1-D tensor of neuron scores
+      - "neuron_cost": params removed when one hidden neuron is removed
+      - "num_neurons": number of hidden neurons in the layer
 
     Returns:
-        list of keep-index tensors, one per layer (same order as input).
+        keep_counts: number of neurons to keep per layer (same order)
     """
     if not (0.0 <= global_pruning_ratio < 1.0):
         raise ValueError(
             f"global_pruning_ratio must be in [0, 1), got {global_pruning_ratio}"
         )
 
-    # Normalize each layer's scores to [0, 1] by dividing by per-layer max.
-    # This makes the scores dimensionless and comparable across layers.
-    normalized = []
-    for scores in layer_scores:
-        max_val = scores.max()
-        normalized.append(scores / (max_val + 1e-12))
+    # Total prunable parameter budget
+    total_prunable_params = 0
+    for info in layer_infos:
+        total_prunable_params += info["num_neurons"] * info["neuron_cost"]
 
-    # Pool all normalized scores with their layer assignment
-    all_scores = torch.cat(normalized)
-    total_neurons = all_scores.numel()
-    n_remove = int(round(total_neurons * global_pruning_ratio))
-    n_keep = max(1, total_neurons - n_remove)
+    target_keep_params = int(
+        round(total_prunable_params * (1.0 - global_pruning_ratio))
+    )
+    target_keep_params = max(
+        len(layer_infos), min(target_keep_params, total_prunable_params)
+    )
 
-    # Global threshold: the score of the n_keep-th largest neuron
-    global_threshold = torch.topk(all_scores, k=n_keep, largest=True).values[-1]
+    # Layer mass = layer importance * layer total size
+    # This favors layers that are both important and large.
+    masses = []
+    for info in layer_infos:
+        layer_importance = compute_layer_importance(info["scores"])
+        layer_total_params = info["num_neurons"] * info["neuron_cost"]
+        mass = layer_importance * layer_total_params
+        masses.append(mass)
 
-    # Per layer: keep neurons whose normalized score is >= global threshold
-    keep_indices = []
-    layer_offset = 0
-    for norm_scores in normalized:
-        layer_keep = (norm_scores >= global_threshold).nonzero(as_tuple=True)[0]
-        # guarantee at least one neuron per layer
-        if len(layer_keep) == 0:
-            layer_keep = torch.argmax(norm_scores).unsqueeze(0)
-        keep_indices.append(layer_keep)
-        layer_offset += len(norm_scores)
+    mass_sum = sum(masses)
+    if mass_sum <= 0:
+        masses = [1.0 for _ in layer_infos]
+        mass_sum = float(len(layer_infos))
 
-    return keep_indices
+    # Initial allocation in "kept params"
+    keep_params_alloc = []
+    for info, mass in zip(layer_infos, masses):
+        alloc = target_keep_params * (mass / mass_sum)
+
+        # At least one neuron per layer
+        min_params = info["neuron_cost"]
+        max_params = info["num_neurons"] * info["neuron_cost"]
+        alloc = max(min_params, min(int(round(alloc)), max_params))
+        keep_params_alloc.append(alloc)
+
+    # Convert param allocation -> neuron counts
+    keep_counts = []
+    for info, keep_params in zip(layer_infos, keep_params_alloc):
+        k = int(round(keep_params / info["neuron_cost"]))
+        k = max(1, min(k, info["num_neurons"]))
+        keep_counts.append(k)
+
+    # Fix rounding mismatch against global target in neuron-cost space
+    current_keep_params = sum(
+        k * info["neuron_cost"] for k, info in zip(keep_counts, layer_infos)
+    )
+
+    if current_keep_params > target_keep_params:
+        # remove neurons from least important layers first
+        order = sorted(
+            range(len(layer_infos)),
+            key=lambda i: compute_layer_importance(layer_infos[i]["scores"]),
+        )
+        for i in order:
+            while (
+                keep_counts[i] > 1
+                and current_keep_params - layer_infos[i]["neuron_cost"]
+                >= target_keep_params
+            ):
+                keep_counts[i] -= 1
+                current_keep_params -= layer_infos[i]["neuron_cost"]
+
+    elif current_keep_params < target_keep_params:
+        # add neurons to most important layers first
+        order = sorted(
+            range(len(layer_infos)),
+            key=lambda i: compute_layer_importance(layer_infos[i]["scores"]),
+            reverse=True,
+        )
+        for i in order:
+            while (
+                keep_counts[i] < layer_infos[i]["num_neurons"]
+                and current_keep_params + layer_infos[i]["neuron_cost"]
+                <= target_keep_params
+            ):
+                keep_counts[i] += 1
+                current_keep_params += layer_infos[i]["neuron_cost"]
+
+    return keep_counts
 
 
 class ActivationCollector:
@@ -389,12 +455,12 @@ def prune_conette(
             )
 
     if global_pruning_ratio is not None:
-        # ── Global mode (Minitron-style) ──────────────────────────────────────
-        # Step 1: compute per-layer scores for all encoder blocks
+        # ── Global mode: layer-aware budget allocation + local top-k ─────────
         print(
             f"[Encoder] Global pruning | ratio={global_pruning_ratio} | score_mode={score_mode}"
         )
-        layer_scores = []
+
+        layer_infos = []
         for stage_idx, block_idx, block, base_name in enc_blocks:
             act = (
                 activation_scores.get(f"{base_name}.pwconv1")
@@ -403,33 +469,67 @@ def prune_conette(
             )
             if act is not None:
                 act = act.to(
-                    device=block.pwconv1.weight.device, dtype=block.pwconv1.weight.dtype
+                    device=block.pwconv1.weight.device,
+                    dtype=block.pwconv1.weight.dtype,
                 )
+
             scores = compute_linear_hidden_scores(
-                block.pwconv1, block.pwconv2, mode=score_mode, activation_scores=act
+                block.pwconv1,
+                block.pwconv2,
+                mode=score_mode,
+                activation_scores=act,
             )
-            layer_scores.append(scores)
 
-        # Step 2: global ranking with per-layer max-normalization
-        keep_indices = compute_global_keep_indices(layer_scores, global_pruning_ratio)
+            neuron_cost = (
+                block.pwconv1.in_features
+                + block.pwconv2.out_features
+                + int(block.pwconv1.bias is not None)
+                + int(block.pwconv2.bias is not None)
+            )
 
-        # Step 3: apply per layer
-        for (stage_idx, block_idx, block, base_name), keep_idx in zip(
-            enc_blocks, keep_indices
-        ):
-            old_hidden = block.pwconv1.out_features
+            layer_infos.append(
+                {
+                    "stage_idx": stage_idx,
+                    "block_idx": block_idx,
+                    "block": block,
+                    "base_name": base_name,
+                    "scores": scores,
+                    "num_neurons": block.pwconv1.out_features,
+                    "neuron_cost": neuron_cost,
+                }
+            )
+
+        keep_counts = allocate_layerwise_keep_counts(layer_infos, global_pruning_ratio)
+
+        for info, k in zip(layer_infos, keep_counts):
+            stage_idx = info["stage_idx"]
+            block_idx = info["block_idx"]
+            block = info["block"]
+            base_name = info["base_name"]
+            scores = info["scores"]
+            old_hidden = info["num_neurons"]
+
+            keep_idx = torch.topk(scores, k=k, largest=True).indices
             new_pw1, new_pw2 = apply_linear_pair_pruning(
-                block.pwconv1, block.pwconv2, keep_idx
+                block.pwconv1,
+                block.pwconv2,
+                keep_idx,
             )
+
             block.pwconv1 = new_pw1
             block.pwconv2 = new_pw2
+
             pruned_layer_names.add(f"{base_name}.pwconv1")
             pruned_layer_names.add(f"{base_name}.pwconv2")
+
             if verbose:
+                layer_importance = compute_layer_importance(scores)
                 print(
                     f"[ConvNeXt stage {stage_idx} block {block_idx}] "
                     f"hidden dim: {old_hidden} -> {new_pw1.out_features} "
-                    f"(kept {len(keep_idx)}/{old_hidden})"
+                    f"(kept {k}/{old_hidden}, "
+                    f"layer_importance={layer_importance:.4f}, "
+                    f"neuron_cost={info['neuron_cost']})"
                 )
 
     elif convnext_3072_threshold is not None or convnext_1536_threshold is not None:
