@@ -15,8 +15,8 @@ pruning:
 
 kd:
   mode: pure_kd
-  lr: 1.0e-6
-  lr_encoder: 1.0e-7
+  lr: 1.0e-5
+  lr_encoder: 5.0e-7
   num_epochs: 25
   batch_size: 4
   grad_accum_steps: 4
