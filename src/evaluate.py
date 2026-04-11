@@ -45,7 +45,7 @@ def _technique_name():
 
 
 def prepare_dataloader(verbose, subset):
-    print(f"loading dataset {config.dataset}")
+    print(f"loading dataset {config.dataset} {subset}")
 
     if config.dataset == "clotho":
 
