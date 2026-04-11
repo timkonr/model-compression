@@ -193,6 +193,7 @@ def perform_inference(verbose):
                 "decoder_threshold": config.decoder_threshold,
                 "convnext_3072_threshold": config.convnext_3072_threshold,
                 "convnext_1536_threshold": config.convnext_1536_threshold,
+                "global_pruning_ratio": getattr(config, "global_pruning_ratio", None),
                 "score_mode": config.pruning_score_mode,
                 "num_calibration_batches": config.num_calibration_batches,
             }
