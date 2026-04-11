@@ -119,7 +119,8 @@ def perform_inference(verbose):
 
     # calib_loader: training subset (Clotho="dev", AudioCaps="train") — only needed for
     # activation-aware pruning calibration (score_mode=wanda). Must NOT be test data.
-    needs_calib = config.pruning and config.pruning_score_mode == "wanda"
+    # Also needed for kd mode — the pruned architecture must be rebuilt with wanda scores.
+    needs_calib = config.pruning_score_mode == "wanda" and (config.pruning or config.kd)
     calib_loader = None
     if needs_calib:
         train_subset = "train" if config.dataset == "audiocaps" else "dev"
