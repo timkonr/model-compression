@@ -21,7 +21,7 @@ kd:
   batch_size: 4
   grad_accum_steps: 4
   patience: 5
-  save_dir: checkpoints/kd_global50_conette_clotho
+  save_dir: checkpoints/kd_global50_conette_clotho_hybrid
 
 data_folder: data/
 model_folder: model/
