@@ -57,8 +57,9 @@ lr_encoder = (
     1e-6  # encoder learning rate (lower to avoid overwriting pretrained features)
 )
 kd_mode = (
-    "pure_kd"  # pure_kd (Minitron BP #5) | hybrid (Hinton: CE + dynamic_alpha * KD)
+    "pure_kd"  # pure_kd (Minitron BP #5) | hybrid (Hinton: α·CE + (1-α)·KD)
 )
+kd_alpha = 0.5  # hybrid only: weight on CE loss (0=pure KD, 1=pure CE)
 kd_save_dir = "checkpoints/kd"
 
 ## reproducibility
@@ -164,11 +165,13 @@ def load_from_yaml(path: str) -> None:
             "patience",
             "save_dir",
             "mode",
+            "alpha",
         ):
             config_key = {
                 "model_path": "kd_model",
                 "save_dir": "kd_save_dir",
                 "mode": "kd_mode",
+                "alpha": "kd_alpha",
             }.get(key, key)
             if key in kd_cfg:
                 g[config_key] = kd_cfg[key]

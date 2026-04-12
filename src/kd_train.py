@@ -64,24 +64,21 @@ def kd_loss(student_logits, teacher_logits, targets, pad_idx: int):
 
 
 def train_step(
-    student_plm, teacher_plm, batch, teacher_audio_batch=None, mode="pure_kd"
+    student_plm, teacher_plm, batch, teacher_audio_batch=None, mode="pure_kd", alpha=0.5
 ):
     """
     KD training step supporting two modes:
 
     - "pure_kd"  (Minitron BP #5): L = L_KD only — no CE loss.
-                 Empirically shown to outperform hybrid for pruning recovery.
-    - "hybrid"   (Hinton et al. 2015): L = L_CE + alpha_dyn * L_KD, where
-                 alpha_dyn = L_CE / L_KD (per-batch, keeps both terms equal magnitude).
+    - "hybrid"   (Hinton et al. 2015): L = α·L_CE + (1-α)·L_KD
+                 alpha controls the CE/KD trade-off (0=pure KD, 1=pure CE).
 
     CE is always computed for monitoring, even in pure_kd mode.
 
     teacher_audio_batch: dict with "audio" and "audio_shape" from the teacher's own
-    (unpruned) ConvNeXt preprocessor. If None, falls back to student's audio features —
-    but this means the teacher never uses its own encoder, which limits encoder recovery.
-    Passing teacher_audio_batch is the correct setup for full KD recovery.
+    (unpruned) ConvNeXt preprocessor. If None, falls back to student's audio features.
 
-    Returns: (loss, loss_ce, loss_kd, alpha_dyn)  — alpha_dyn=0 for pure_kd.
+    Returns: (loss, loss_ce, loss_kd, alpha)
     """
     audio, audio_shape = batch["audio"], batch["audio_shape"]
     caps_in, caps_out = batch["captions"][:, :-1], batch["captions"][:, 1:]
@@ -107,12 +104,11 @@ def train_step(
 
     if mode == "pure_kd":
         loss = loss_kd
-        alpha_dyn = torch.tensor(0.0)
-    else:  # hybrid
-        alpha_dyn = loss_ce.detach() / (loss_kd.detach() + 1e-8)
-        loss = loss_ce + alpha_dyn * loss_kd
+        alpha = 0.0
+    else:  # hybrid: α·L_CE + (1-α)·L_KD
+        loss = alpha * loss_ce + (1.0 - alpha) * loss_kd
 
-    return loss, loss_ce.detach(), loss_kd.detach(), alpha_dyn.detach()
+    return loss, loss_ce.detach(), loss_kd.detach(), torch.tensor(alpha)
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +222,7 @@ def train(
                     batch,
                     teacher_audio_batch=t_audio_batch,
                     mode=mode,
+                    alpha=getattr(config, "kd_alpha", 0.5),
                 )
 
             # Gradient accumulation: scale loss, accumulate, step every grad_accum_steps
@@ -273,6 +270,7 @@ def train(
                         batch,
                         teacher_audio_batch=t_audio_batch,
                         mode=mode,
+                        alpha=getattr(config, "kd_alpha", 0.5),
                     )
                     val_loss_sum += loss.item()
                     n_val += 1
