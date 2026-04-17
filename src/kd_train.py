@@ -1,7 +1,7 @@
 """
 mc-train-kd: Fine-tune a pruned CoNeTTE student via Knowledge Distillation.
 
-L = (1 - alpha) * L_CE(student, ground_truth) + alpha * L_KD(student, teacher)
+L = alpha * L_CE(student, ground_truth) + (1 - alpha) * L_KD(student, teacher)
 
 The student is pruned internally from the baseline — no pre-saved pruned model needed.
 Teacher is always the unpruned baseline (frozen).
@@ -178,6 +178,10 @@ def train(
     mode="pure_kd",
     student_hidden_dims=None,
 ):
+    valid_modes = {"pure_kd", "hybrid", "encoder_ce"}
+    if mode not in valid_modes:
+        raise ValueError(f"Unknown kd mode: {mode}. Expected one of {sorted(valid_modes)}")
+
     train_subset = "train" if dataset_name == "audiocaps" else "dev"
 
     train_loader = build_dataloader(dataset_name, train_subset, batch_size)
@@ -211,10 +215,12 @@ def train(
 
     # Choose effective training mode based on detected pruning
     if encoder_pruned and not decoder_pruned:
-        # Decoder identical to teacher → KD provides no signal on logits.
-        # CE on encoder features is the right recovery strategy.
-        effective_mode = "encoder_ce"
-        print("Pruned: encoder only  →  strategy: CE fine-tuning of encoder (decoder frozen)")
+        # Decoder stays frozen, but allow configured KD mode for encoder recovery.
+        # encoder_ce remains available as an explicit fallback mode.
+        effective_mode = mode
+        print(
+            f"Pruned: encoder only  →  strategy: {effective_mode} with decoder frozen"
+        )
     elif decoder_pruned and not encoder_pruned:
         # Encoder identical to teacher → KD on logits guides decoder recovery.
         effective_mode = mode
@@ -261,7 +267,7 @@ def train(
         optimizer, T_max=total_steps, eta_min=lr / 100
     )
 
-    best_val_loss = -math.inf  # CIDEr: higher = better
+    best_val_metric = -math.inf  # monitor is maximized (FENSE when val loader exists)
     epochs_no_improve = 0
     os.makedirs(save_dir, exist_ok=True)
 
@@ -271,7 +277,7 @@ def train(
     if val_loader is not None:
         init_fense = run_fense_val(student, val_loader, dataset_name)
         print(f"Pre-training FENSE (pruned, no KD): {init_fense:.4f}")
-        best_val_loss = init_fense  # start from pruned baseline, not -inf
+        best_val_metric = init_fense  # start from pruned baseline, not -inf
     else:
         init_fense = None
 
@@ -287,14 +293,14 @@ def train(
             # logits reflect full-quality audio features, not the student's pruned ones.
             # For encoder_ce: teacher forward pass is skipped (handled inside train_step).
             t_audio_batch = None
-            if effective_mode != "encoder_ce":
+            if effective_mode != "encoder_ce" and encoder_pruned:
                 with torch.no_grad():
                     t_audio_batch = teacher.preprocessor(
                         raw_batch["audio"], raw_batch["sr"]
                     )
 
             with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
-                loss, loss_ce, loss_kd, alpha_dyn = train_step(
+                loss, loss_ce, loss_kd, alpha_value = train_step(
                     student.model,
                     teacher.model,
                     batch,
@@ -319,10 +325,17 @@ def train(
             n_steps += 1
 
             if step % 100 == 0:
+                lrs = scheduler.get_last_lr()
+                if len(lrs) == 1:
+                    lr_log = f"lr={lrs[0]:.2e}"
+                else:
+                    lr_log = " ".join(
+                        [f"lr_g{idx}={lr_val:.2e}" for idx, lr_val in enumerate(lrs)]
+                    )
                 print(
                     f"  epoch={epoch} step={step}/{len(train_loader)} "
                     f"loss={loss.item():.4f} ce={loss_ce.item():.4f} kd={loss_kd.item():.4f} "
-                    f"alpha_dyn={alpha_dyn.item():.1f} lr={scheduler.get_last_lr()[0]:.2e}"
+                    f"alpha={alpha_value.item():.1f} {lr_log}"
                 )
 
         avg_loss = epoch_loss / n_steps
@@ -343,7 +356,7 @@ def train(
                 for raw_batch in val_loader:
                     batch = prepare_batch(student, raw_batch, dataset_name)
                     t_audio_batch = None
-                    if effective_mode != "encoder_ce":
+                    if effective_mode != "encoder_ce" and encoder_pruned:
                         t_audio_batch = teacher.preprocessor(
                             raw_batch["audio"], raw_batch["sr"]
                         )
@@ -361,8 +374,8 @@ def train(
             val_fense = run_fense_val(student, val_loader, dataset_name)
             monitor = val_fense  # higher = better
             print(f"  val_loss={val_loss:.4f}  val_fense={val_fense:.4f}")
-        if monitor > best_val_loss:
-            best_val_loss = monitor
+        if monitor > best_val_metric:
+            best_val_metric = monitor
             epochs_no_improve = 0
             best_path = os.path.join(save_dir, "best")
             os.makedirs(best_path, exist_ok=True)
@@ -378,9 +391,26 @@ def train(
                         "epoch": epoch,
                         "val_fense": monitor,
                         "mode": effective_mode,
+                        "mode_configured": mode,
                         "temperature": 1.0,
+                        "alpha": getattr(config, "kd_alpha", None),
                         "lr": lr,
+                        "lr_encoder": lr_encoder,
                         "dataset": dataset_name,
+                        "encoder_pruned": encoder_pruned,
+                        "decoder_pruned": decoder_pruned,
+                        "trainable_params": {
+                            "trainable": trainable,
+                            "total": total,
+                            "encoder": sum(p.numel() for p in encoder_params)
+                            if encoder_pruned
+                            else 0,
+                            "decoder_projection": sum(
+                                p.numel() for p in decoder_params
+                            )
+                            if decoder_pruned
+                            else 0,
+                        },
                         "pruning": {
                             "global_pruning_ratio": getattr(
                                 config, "global_pruning_ratio", None
