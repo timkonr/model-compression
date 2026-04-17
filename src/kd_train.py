@@ -68,16 +68,19 @@ def train_step(
     student_plm, teacher_plm, batch, teacher_audio_batch=None, mode="pure_kd", alpha=0.5
 ):
     """
-    KD training step supporting two modes:
+    Training step supporting three modes:
 
-    - "pure_kd"  (Minitron BP #5): L = L_KD only — no CE loss.
-    - "hybrid"   (Hinton et al. 2015): L = α·L_CE + (1-α)·L_KD
-                 alpha controls the CE/KD trade-off (0=pure KD, 1=pure CE).
+    - "encoder_ce": L = L_CE only. Used when only the encoder was pruned — the
+                    decoder is identical to the teacher's, so KD provides no signal.
+                    Teacher forward pass is skipped entirely.
+    - "pure_kd"   (Minitron BP #5): L = L_KD only — no CE loss.
+    - "hybrid"    (Hinton et al. 2015): L = α·L_CE + (1-α)·L_KD
+                  alpha controls the CE/KD trade-off (0=pure KD, 1=pure CE).
 
-    CE is always computed for monitoring, even in pure_kd mode.
+    CE is always computed for monitoring except in pure_kd mode.
 
     teacher_audio_batch: dict with "audio" and "audio_shape" from the teacher's own
-    (unpruned) ConvNeXt preprocessor. If None, falls back to student's audio features.
+    (unpruned) ConvNeXt preprocessor. Ignored in encoder_ce mode.
 
     Returns: (loss, loss_ce, loss_kd, alpha)
     """
@@ -87,6 +90,12 @@ def train_step(
     encoder_outs = student_plm.encode_audio(audio, audio_shape)
     student_logits = student_plm.decode_audio(encoder_outs, "forcing", caps_in=caps_in)
     loss_ce = student_plm.train_criterion(student_logits, caps_out)
+
+    if mode == "encoder_ce":
+        # Decoder is identical to the teacher — CE is sufficient for encoder recovery.
+        # Skip teacher forward pass entirely.
+        zero = loss_ce.new_tensor(0.0)
+        return loss_ce, loss_ce.detach(), zero, zero
 
     with torch.no_grad():
         if teacher_audio_batch is not None:
@@ -182,37 +191,71 @@ def train(
         p.requires_grad_(False)
     teacher.eval()
 
-    # Unfreeze full student — encoder with lower lr, decoder+projection with higher lr
-    # ConvNeXt encoder sits in student.preprocessor.encoder (not student.model.encoder)
+    # Detect which components were actually pruned by comparing student vs teacher dims.
+    # Only unfreeze and optimise the pruned components — unchanged parts don't need recovery.
+    teacher_hidden_dims = get_conette_hidden_dims(teacher)
+    if student_hidden_dims and teacher_hidden_dims:
+        encoder_pruned = any(
+            student_hidden_dims.get(k) != v
+            for k, v in teacher_hidden_dims.items()
+            if "decoder" not in k
+        )
+        decoder_pruned = any(
+            student_hidden_dims.get(k) != v
+            for k, v in teacher_hidden_dims.items()
+            if "decoder" in k
+        )
+    else:
+        # Fallback: train everything if we can't determine what changed
+        encoder_pruned = decoder_pruned = True
+
+    # Choose effective training mode based on detected pruning
+    if encoder_pruned and not decoder_pruned:
+        # Decoder identical to teacher → KD provides no signal on logits.
+        # CE on encoder features is the right recovery strategy.
+        effective_mode = "encoder_ce"
+        print("Pruned: encoder only  →  strategy: CE fine-tuning of encoder (decoder frozen)")
+    elif decoder_pruned and not encoder_pruned:
+        # Encoder identical to teacher → KD on logits guides decoder recovery.
+        effective_mode = mode
+        print(f"Pruned: decoder only  →  strategy: {mode} on decoder (encoder frozen)")
+    else:
+        # Both pruned (or fallback) — use configured mode on all components
+        effective_mode = mode
+        print(f"Pruned: encoder + decoder  →  strategy: {mode}")
+
+    # Freeze all, then selectively unfreeze only pruned components
     for p in student.parameters():
-        p.requires_grad_(True)
+        p.requires_grad_(False)
 
     encoder_params = list(student.preprocessor.encoder.parameters())
     decoder_params = list(student.model.decoder.parameters()) + list(
         student.model.projection.parameters()
     )
 
+    opt_groups = []
+    if encoder_pruned:
+        for p in encoder_params:
+            p.requires_grad_(True)
+        opt_groups.append({"params": encoder_params, "lr": lr_encoder})
+    if decoder_pruned:
+        for p in decoder_params:
+            p.requires_grad_(True)
+        opt_groups.append({"params": decoder_params, "lr": lr})
+
     trainable = sum(p.numel() for p in student.parameters() if p.requires_grad)
     total = sum(p.numel() for p in student.parameters())
     effective_batch = batch_size * grad_accum_steps
     print(
-        f"KD training | mode={mode} | τ=1.0 | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size} (effective={effective_batch})"
+        f"Fine-tuning | mode={effective_mode} | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size} (effective={effective_batch})"
     )
     print(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.1f}%)")
-    print(
-        f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e}"
-    )
-    print(
-        f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e}"
-    )
+    if encoder_pruned:
+        print(f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e}")
+    if decoder_pruned:
+        print(f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e}")
 
-    optimizer = torch.optim.AdamW(
-        [
-            {"params": encoder_params, "lr": lr_encoder},
-            {"params": decoder_params, "lr": lr},
-        ],
-        weight_decay=1e-4,
-    )
+    optimizer = torch.optim.AdamW(opt_groups, weight_decay=1e-4)
     total_steps = num_epochs * len(train_loader)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=total_steps, eta_min=lr / 100
@@ -224,6 +267,14 @@ def train(
 
     scaler = torch.cuda.amp.GradScaler(enabled=torch.cuda.is_available())
 
+    # Baseline FENSE before any training — validates pruned model quality
+    if val_loader is not None:
+        init_fense = run_fense_val(student, val_loader, dataset_name)
+        print(f"Pre-training FENSE (pruned, no KD): {init_fense:.4f}")
+        best_val_loss = init_fense  # start from pruned baseline, not -inf
+    else:
+        init_fense = None
+
     for epoch in range(num_epochs):
         student.train()
         epoch_loss = epoch_ce = epoch_kd = 0.0
@@ -232,15 +283,15 @@ def train(
         for step, raw_batch in enumerate(train_loader):
             batch = prepare_batch(student, raw_batch, dataset_name)
 
-            # Teacher runs its own (unpruned) ConvNeXt on the raw audio.
-            # The ConvNeXt is in the preprocessor (PLM uses FrameIdentEncoder).
-            # Without this, both teacher and student would share the student's
-            # degraded (pruned) audio features — the teacher could not guide
-            # encoder recovery.
-            with torch.no_grad():
-                t_audio_batch = teacher.preprocessor(
-                    raw_batch["audio"], raw_batch["sr"]
-                )
+            # For KD modes: teacher runs its own (unpruned) ConvNeXt so that the teacher
+            # logits reflect full-quality audio features, not the student's pruned ones.
+            # For encoder_ce: teacher forward pass is skipped (handled inside train_step).
+            t_audio_batch = None
+            if effective_mode != "encoder_ce":
+                with torch.no_grad():
+                    t_audio_batch = teacher.preprocessor(
+                        raw_batch["audio"], raw_batch["sr"]
+                    )
 
             with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                 loss, loss_ce, loss_kd, alpha_dyn = train_step(
@@ -248,7 +299,7 @@ def train(
                     teacher.model,
                     batch,
                     teacher_audio_batch=t_audio_batch,
-                    mode=mode,
+                    mode=effective_mode,
                     alpha=getattr(config, "kd_alpha", 0.5),
                 )
 
@@ -285,29 +336,31 @@ def train(
         # Higher CIDEr = better, so we use > for improvement check.
         monitor = -avg_loss  # fallback if no val set (negated: higher = better)
         if val_loader is not None:
-            # Log KD-loss on val for diagnostics
+            # Log train-loss on val for diagnostics, FENSE as primary monitor
             student.eval()
-            val_kd_sum, n_val = 0.0, 0
+            val_loss_sum, n_val = 0.0, 0
             with torch.no_grad():
                 for raw_batch in val_loader:
                     batch = prepare_batch(student, raw_batch, dataset_name)
-                    t_audio_batch = teacher.preprocessor(
-                        raw_batch["audio"], raw_batch["sr"]
-                    )
+                    t_audio_batch = None
+                    if effective_mode != "encoder_ce":
+                        t_audio_batch = teacher.preprocessor(
+                            raw_batch["audio"], raw_batch["sr"]
+                        )
                     loss, _, _, _ = train_step(
                         student.model,
                         teacher.model,
                         batch,
                         teacher_audio_batch=t_audio_batch,
-                        mode=mode,
+                        mode=effective_mode,
                         alpha=getattr(config, "kd_alpha", 0.5),
                     )
-                    val_kd_sum += loss.item()
+                    val_loss_sum += loss.item()
                     n_val += 1
-            val_kd = val_kd_sum / max(n_val, 1)
+            val_loss = val_loss_sum / max(n_val, 1)
             val_fense = run_fense_val(student, val_loader, dataset_name)
             monitor = val_fense  # higher = better
-            print(f"  val_kd_loss={val_kd:.4f}  val_fense={val_fense:.4f}")
+            print(f"  val_loss={val_loss:.4f}  val_fense={val_fense:.4f}")
         if monitor > best_val_loss:
             best_val_loss = monitor
             epochs_no_improve = 0
@@ -324,7 +377,7 @@ def train(
                     {
                         "epoch": epoch,
                         "val_fense": monitor,
-                        "mode": mode,
+                        "mode": effective_mode,
                         "temperature": 1.0,
                         "lr": lr,
                         "dataset": dataset_name,
