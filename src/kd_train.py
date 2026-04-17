@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from aac_datasets import AudioCaps, Clotho
 from aac_datasets.utils.collate import BasicCollate
+from aac_metrics import evaluate as aac_evaluate
 from conette import CoNeTTEConfig, CoNeTTEModel
 from torch.utils.data import DataLoader
 
@@ -128,6 +129,32 @@ def build_dataloader(dataset_name, subset, batch_size):
     )
 
 
+@torch.no_grad()
+def run_fense_val(student, val_loader, dataset_name):
+    """
+    Run beam-search inference on the val set and return FENSE score.
+
+    FENSE (Fluency ENhanced Sentence-level scorEr) measures semantic similarity
+    via SBERT + penalises disfluent outputs. Faster than SPIDEr (no Java/SPICE),
+    ~20-30s on T4 for 1045 samples. Better proxy for caption quality than CIDEr
+    because it captures meaning, not just n-gram overlap.
+    Higher = better.
+    """
+    student.eval()
+    predictions, references = [], []
+    for batch in val_loader:
+        outputs = student(batch["audio"], batch["sr"], task=dataset_name)
+        predictions.extend(outputs["cands"])
+        references.extend(batch["captions"])
+    corpus_scores, _ = aac_evaluate(
+        candidates=predictions,
+        mult_references=references,
+        metrics=["fense"],
+        verbose=0,
+    )
+    return corpus_scores["fense"].item()
+
+
 def train(
     teacher,
     student,
@@ -191,7 +218,7 @@ def train(
         optimizer, T_max=total_steps, eta_min=lr / 100
     )
 
-    best_val_loss = math.inf
+    best_val_loss = -math.inf  # CIDEr: higher = better
     epochs_no_improve = 0
     os.makedirs(save_dir, exist_ok=True)
 
@@ -253,11 +280,14 @@ def train(
             f"avg_ce={epoch_ce/n_steps:.4f} avg_kd={epoch_kd/n_steps:.4f}"
         )
 
-        # Validation
-        monitor = avg_loss  # fallback if no val set
+        # Validation — CIDEr as primary monitor, KD-loss logged for diagnostics.
+        # CIDEr directly measures caption quality (the fast half of SPIDEr, no Java).
+        # Higher CIDEr = better, so we use > for improvement check.
+        monitor = -avg_loss  # fallback if no val set (negated: higher = better)
         if val_loader is not None:
+            # Log KD-loss on val for diagnostics
             student.eval()
-            val_loss_sum, n_val = 0.0, 0
+            val_kd_sum, n_val = 0.0, 0
             with torch.no_grad():
                 for raw_batch in val_loader:
                     batch = prepare_batch(student, raw_batch, dataset_name)
@@ -272,11 +302,13 @@ def train(
                         mode=mode,
                         alpha=getattr(config, "kd_alpha", 0.5),
                     )
-                    val_loss_sum += loss.item()
+                    val_kd_sum += loss.item()
                     n_val += 1
-            monitor = val_loss_sum / max(n_val, 1)
-            print(f"  val_kd_loss={monitor:.4f}")
-        if monitor < best_val_loss:
+            val_kd = val_kd_sum / max(n_val, 1)
+            val_fense = run_fense_val(student, val_loader, dataset_name)
+            monitor = val_fense  # higher = better
+            print(f"  val_kd_loss={val_kd:.4f}  val_fense={val_fense:.4f}")
+        if monitor > best_val_loss:
             best_val_loss = monitor
             epochs_no_improve = 0
             best_path = os.path.join(save_dir, "best")
@@ -291,7 +323,7 @@ def train(
                 json.dump(
                     {
                         "epoch": epoch,
-                        "val_loss": monitor,
+                        "val_fense": monitor,
                         "mode": mode,
                         "temperature": 1.0,
                         "lr": lr,
@@ -311,7 +343,7 @@ def train(
                     f,
                     indent=2,
                 )
-            print(f"  => New best saved (val_loss={monitor:.4f})")
+            print(f"  => New best saved (val_fense={monitor:.4f})")
         else:
             epochs_no_improve += 1
             print(f"  No improvement ({epochs_no_improve}/{patience})")
