@@ -180,7 +180,9 @@ def train(
 ):
     valid_modes = {"pure_kd", "hybrid", "encoder_ce"}
     if mode not in valid_modes:
-        raise ValueError(f"Unknown kd mode: {mode}. Expected one of {sorted(valid_modes)}")
+        raise ValueError(
+            f"Unknown kd mode: {mode}. Expected one of {sorted(valid_modes)}"
+        )
 
     train_subset = "train" if dataset_name == "audiocaps" else "dev"
 
@@ -257,11 +259,15 @@ def train(
     )
     print(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.1f}%)")
     if encoder_pruned:
-        print(f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e}")
+        print(
+            f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e}"
+        )
     if decoder_pruned:
-        print(f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e}")
+        print(
+            f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e}"
+        )
 
-    optimizer = torch.optim.AdamW(opt_groups, weight_decay=1e-4)
+    optimizer = torch.optim.AdamW(opt_groups, weight_decay=1e-5)
     total_steps = num_epochs * len(train_loader)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=total_steps, eta_min=lr / 100
@@ -402,14 +408,16 @@ def train(
                         "trainable_params": {
                             "trainable": trainable,
                             "total": total,
-                            "encoder": sum(p.numel() for p in encoder_params)
-                            if encoder_pruned
-                            else 0,
-                            "decoder_projection": sum(
-                                p.numel() for p in decoder_params
-                            )
-                            if decoder_pruned
-                            else 0,
+                            "encoder": (
+                                sum(p.numel() for p in encoder_params)
+                                if encoder_pruned
+                                else 0
+                            ),
+                            "decoder_projection": (
+                                sum(p.numel() for p in decoder_params)
+                                if decoder_pruned
+                                else 0
+                            ),
                         },
                         "pruning": {
                             "global_pruning_ratio": getattr(

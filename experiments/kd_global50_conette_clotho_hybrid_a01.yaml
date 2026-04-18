@@ -18,7 +18,7 @@ kd:
   mode: hybrid
   alpha: 0.1
   lr: 1.0e-6
-  lr_encoder: 1.0e-7
+  lr_encoder: 3.0e-6
   num_epochs: 25
   batch_size: 4
   grad_accum_steps: 4
