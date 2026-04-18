@@ -359,6 +359,8 @@ def train(
         # CIDEr directly measures caption quality (the fast half of SPIDEr, no Java).
         # Higher CIDEr = better, so we use > for improvement check.
         monitor = -avg_loss  # fallback if no val set (negated: higher = better)
+        val_loss = None
+        val_fense = None
         if val_loader is not None:
             # Log train-loss on val for diagnostics, FENSE as primary monitor
             student.eval()
@@ -385,7 +387,8 @@ def train(
             val_fense = run_fense_val(student, val_loader, dataset_name)
             monitor = val_fense  # higher = better
             print(f"  val_loss={val_loss:.4f}  val_fense={val_fense:.4f}")
-        if monitor > best_val_metric:
+        is_best = monitor > best_val_metric
+        if is_best:
             best_val_metric = monitor
             epochs_no_improve = 0
             best_path = os.path.join(save_dir, "best")
@@ -444,9 +447,26 @@ def train(
         else:
             epochs_no_improve += 1
             print(f"  No improvement ({epochs_no_improve}/{patience})")
-            if epochs_no_improve >= patience:
-                print("Early stopping.")
-                break
+
+        with open(os.path.join(save_dir, "training_log.jsonl"), "a") as log_f:
+            json.dump(
+                {
+                    "epoch": epoch,
+                    "train_loss": round(avg_loss, 6),
+                    "train_ce": round(epoch_ce / n_steps, 6),
+                    "train_kd": round(epoch_kd / n_steps, 6),
+                    "val_loss": round(val_loss, 6) if val_loss is not None else None,
+                    "val_fense": round(val_fense, 6) if val_fense is not None else None,
+                    "is_best": is_best,
+                    "lr": scheduler.get_last_lr(),
+                },
+                log_f,
+            )
+            log_f.write("\n")
+
+        if epochs_no_improve >= patience:
+            print("Early stopping.")
+            break
 
     print(f"Done. Best model at {save_dir}/best/")
 
