@@ -34,7 +34,9 @@ num_calibration_batches = 128  # Number of batches to use for collecting activat
 decoder_threshold = None
 convnext_3072_threshold = 0.075
 convnext_1536_threshold = None
-global_pruning_ratio = None  # if set: global pruning mode (overrides convnext thresholds)
+global_pruning_ratio = (
+    None  # if set: global pruning mode (overrides convnext thresholds)
+)
 
 ### clapcap
 gpt_threshold = None  # nach 6 stunden abgebrochen
@@ -56,10 +58,9 @@ grad_accum_steps = (
 lr_encoder = (
     1e-6  # encoder learning rate (lower to avoid overwriting pretrained features)
 )
-kd_mode = (
-    "pure_kd"  # pure_kd (Minitron BP #5) | hybrid (Hinton: α·CE + (1-α)·KD)
-)
+kd_mode = "pure_kd"  # pure_kd (Minitron BP #5) | hybrid (Hinton: α·CE + (1-α)·KD) | encoder_ce (CE only)
 kd_alpha = 0.5  # hybrid only: weight on CE loss (0=pure KD, 1=pure CE)
+kd_train_components = "all"  # encoder | all (encoder + decoder + projection)
 kd_save_dir = "checkpoints/kd"
 
 ## reproducibility
@@ -166,12 +167,14 @@ def load_from_yaml(path: str) -> None:
             "save_dir",
             "mode",
             "alpha",
+            "train_components",
         ):
             config_key = {
                 "model_path": "kd_model",
                 "save_dir": "kd_save_dir",
                 "mode": "kd_mode",
                 "alpha": "kd_alpha",
+                "train_components": "kd_train_components",
             }.get(key, key)
             if key in kd_cfg:
                 g[config_key] = kd_cfg[key]

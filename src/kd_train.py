@@ -176,12 +176,18 @@ def train(
     patience,
     save_dir,
     mode="pure_kd",
+    train_components="all",
     student_hidden_dims=None,
 ):
     valid_modes = {"pure_kd", "hybrid", "encoder_ce"}
     if mode not in valid_modes:
         raise ValueError(
             f"Unknown kd mode: {mode}. Expected one of {sorted(valid_modes)}"
+        )
+    valid_components = {"encoder", "all"}
+    if train_components not in valid_components:
+        raise ValueError(
+            f"Unknown train_components: {train_components}. Expected one of {sorted(valid_components)}"
         )
 
     train_subset = "train" if dataset_name == "audiocaps" else "dev"
@@ -242,28 +248,26 @@ def train(
     )
 
     opt_groups = []
-    # if encoder_pruned:
     for p in encoder_params:
         p.requires_grad_(True)
     opt_groups.append({"params": encoder_params, "lr": lr_encoder})
-    # if decoder_pruned:
-    for p in decoder_params:
-        p.requires_grad_(True)
-    opt_groups.append({"params": decoder_params, "lr": lr})
+    if train_components == "all":
+        for p in decoder_params:
+            p.requires_grad_(True)
+        opt_groups.append({"params": decoder_params, "lr": lr})
 
     trainable = sum(p.numel() for p in student.parameters() if p.requires_grad)
     total = sum(p.numel() for p in student.parameters())
     effective_batch = batch_size * grad_accum_steps
     print(
-        f"Fine-tuning | mode={effective_mode} | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size} (effective={effective_batch})"
+        f"Fine-tuning | mode={effective_mode} | train_components={train_components} | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size} (effective={effective_batch})"
     )
     print(f"KD alpha (configured): {getattr(config, 'kd_alpha', None)}")
     print(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.1f}%)")
-    if encoder_pruned:
-        print(
-            f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e}"
-        )
-    if decoder_pruned:
+    print(
+        f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e}"
+    )
+    if train_components == "all":
         print(
             f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e}"
         )
@@ -399,6 +403,7 @@ def train(
                         "val_fense": monitor,
                         "mode": effective_mode,
                         "mode_configured": mode,
+                        "train_components": train_components,
                         "temperature": 1.0,
                         "alpha": getattr(config, "kd_alpha", None),
                         "lr": lr,
@@ -491,6 +496,7 @@ def main():
         patience=config.patience,
         save_dir=config.kd_save_dir,
         mode=config.kd_mode,
+        train_components=getattr(config, "kd_train_components", "all"),
         student_hidden_dims=student_hidden_dims,
     )
 
