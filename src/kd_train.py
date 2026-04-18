@@ -242,14 +242,14 @@ def train(
     )
 
     opt_groups = []
-    if encoder_pruned:
-        for p in encoder_params:
-            p.requires_grad_(True)
-        opt_groups.append({"params": encoder_params, "lr": lr_encoder})
-    if decoder_pruned:
-        for p in decoder_params:
-            p.requires_grad_(True)
-        opt_groups.append({"params": decoder_params, "lr": lr})
+    # if encoder_pruned:
+    for p in encoder_params:
+        p.requires_grad_(True)
+    opt_groups.append({"params": encoder_params, "lr": lr_encoder})
+    # if decoder_pruned:
+    for p in decoder_params:
+        p.requires_grad_(True)
+    opt_groups.append({"params": decoder_params, "lr": lr})
 
     trainable = sum(p.numel() for p in student.parameters() if p.requires_grad)
     total = sum(p.numel() for p in student.parameters())
