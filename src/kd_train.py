@@ -257,6 +257,7 @@ def train(
     print(
         f"Fine-tuning | mode={effective_mode} | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size} (effective={effective_batch})"
     )
+    print(f"KD alpha (configured): {getattr(config, 'kd_alpha', None)}")
     print(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.1f}%)")
     if encoder_pruned:
         print(
@@ -341,7 +342,7 @@ def train(
                 print(
                     f"  epoch={epoch} step={step}/{len(train_loader)} "
                     f"loss={loss.item():.4f} ce={loss_ce.item():.4f} kd={loss_kd.item():.4f} "
-                    f"alpha={alpha_value.item():.1f} {lr_log}"
+                    f"alpha={alpha_value.item():.4f} {lr_log}"
                 )
 
         avg_loss = epoch_loss / n_steps
