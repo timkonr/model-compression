@@ -23,7 +23,7 @@ kd:
   num_epochs: 25
   batch_size: 4
   grad_accum_steps: 4
-  patience: 5
+  patience: 10
   save_dir: checkpoints/kd_global50_conette_clotho_ce_all
 
 data_folder: data/
