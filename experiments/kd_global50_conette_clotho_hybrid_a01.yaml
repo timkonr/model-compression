@@ -16,13 +16,14 @@ pruning:
 
 kd:
   mode: hybrid
+  train_components: all
   alpha: 0.05
-  lr: 1.0e-8
-  lr_encoder: 5.0e-8
+  lr: 1.0e-6
+  lr_encoder: 1.0e-7
   num_epochs: 25
   batch_size: 4
   grad_accum_steps: 4
-  patience: 15
+  patience: 10
   save_dir: checkpoints/kd_global50_conette_clotho_hybrid_a01
 
 data_folder: data/
