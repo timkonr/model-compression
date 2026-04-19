@@ -134,7 +134,13 @@ def build_dataloader(dataset_name, subset, batch_size):
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")
     return DataLoader(
-        ds, batch_size=batch_size, shuffle=(subset != "val"), collate_fn=BasicCollate()
+        ds,
+        batch_size=batch_size,
+        shuffle=(subset != "val"),
+        collate_fn=BasicCollate(),
+        num_workers=4,
+        pin_memory=torch.cuda.is_available(),
+        persistent_workers=True,
     )
 
 
