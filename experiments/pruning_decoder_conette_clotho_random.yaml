@@ -11,7 +11,7 @@ pruning:
   score_mode: random
   num_calibration_batches: 128
   global_pruning_ratio: null
-  decoder_threshold: 0.5
+  decoder_threshold: 0.3
   convnext_3072_threshold: null
   convnext_1536_threshold: null
 
