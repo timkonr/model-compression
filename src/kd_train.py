@@ -10,10 +10,12 @@ Usage:
     mc-train-kd --config experiments/kd_example.yaml
 """
 
+import os
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 import argparse
 import json
 import math
-import os
 import copy
 
 import torch
@@ -306,9 +308,6 @@ def train(
         for step, raw_batch in enumerate(train_loader):
             batch = prepare_batch(student, raw_batch, dataset_name)
 
-            # For KD modes: teacher runs its own (unpruned) ConvNeXt so that the teacher
-            # logits reflect full-quality audio features, not the student's pruned ones.
-            # For encoder_ce: teacher forward pass is skipped (handled inside train_step).
             t_audio_batch = None
             if effective_mode != "encoder_ce" and encoder_pruned:
                 with torch.no_grad():
