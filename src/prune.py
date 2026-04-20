@@ -398,21 +398,25 @@ def collect_conette_encoder_activation_scores(
 
 @torch.no_grad()
 def collect_conette_decoder_activation_scores(
-    model: nn.Module,
+    model: CoNeTTEModel,
     loader,
     num_batches: int = 10,
-    task: str = _UNSET,
+    dataset_name: str = _UNSET,
 ) -> dict[str, torch.Tensor]:
     """
-    Collect input activation statistics for CoNeTTE decoder linear1 layers.
+    Collect input activation statistics for CoNeTTE decoder linear1 layers
+    using teacher-forced forward passes.
 
-    Uses inference-mode forward passes (beam search) — the decoder runs
-    autoregressively, so each call yields per-token hidden states. The
-    ActivationCollector handles arbitrary input shapes and aggregates
-    across all generated tokens via its seq=mean, batch=L2 scheme.
+    Teacher forcing is critical: beam-search inference activates decoder neurons
+    with generated tokens (BOS-dominated), not gold captions. This gives misleading
+    importance scores because the activation distribution at inference time differs
+    fundamentally from training. Teacher forcing matches the training distribution.
     """
-    if task is _UNSET:
-        task = config.dataset
+    # Local import to avoid circular dependency at module level
+    from finetune import prepare_batch
+
+    if dataset_name is _UNSET:
+        dataset_name = config.dataset
     model.eval()
 
     collectors = {}
@@ -432,12 +436,15 @@ def collect_conette_decoder_activation_scores(
 
         handles.append(layer.linear1.register_forward_hook(make_hook(collector)))
 
-    for batch_idx, batch in enumerate(loader):
+    for batch_idx, raw_batch in enumerate(loader):
         if batch_idx >= num_batches:
             break
+        batch = prepare_batch(model, raw_batch, dataset_name)
         audio = batch["audio"]
-        sr = batch["sr"]
-        _ = model(audio, sr, task=task)
+        audio_shape = batch["audio_shape"]
+        caps_in = batch["captions"][:, :-1]
+        encoder_outs = model.model.encode_audio(audio, audio_shape)
+        _ = model.model.decode_audio(encoder_outs, "forcing", caps_in=caps_in)
 
     for handle in handles:
         handle.remove()
@@ -496,6 +503,7 @@ def prune_conette(
             model,
             loader=loader,
             num_batches=num_calibration_batches,
+            dataset_name=config.dataset,
         )
 
     # -------------------------
