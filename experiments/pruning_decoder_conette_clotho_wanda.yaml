@@ -1,0 +1,23 @@
+# Decoder pruning (50%, wanda) — validate vs. sum_l2 baseline
+# Run with: mc-run --config experiments/pruning_decoder_conette_clotho_wanda.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: pruning
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: null
+  decoder_threshold: 0.5
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
