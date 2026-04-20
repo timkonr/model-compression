@@ -192,7 +192,7 @@ def train(
         raise ValueError(
             f"Unknown kd mode: {mode}. Expected one of {sorted(valid_modes)}"
         )
-    valid_components = {"encoder", "all"}
+    valid_components = {"encoder", "decoder", "all"}
     if train_components not in valid_components:
         raise ValueError(
             f"Unknown train_components: {train_components}. Expected one of {sorted(valid_components)}"
@@ -256,10 +256,11 @@ def train(
     )
 
     opt_groups = []
-    for p in encoder_params:
-        p.requires_grad_(True)
-    opt_groups.append({"params": encoder_params, "lr": lr_encoder})
-    if train_components == "all":
+    if train_components in ("encoder", "all"):
+        for p in encoder_params:
+            p.requires_grad_(True)
+        opt_groups.append({"params": encoder_params, "lr": lr_encoder})
+    if train_components in ("decoder", "all"):
         for p in decoder_params:
             p.requires_grad_(True)
         opt_groups.append({"params": decoder_params, "lr": lr})
@@ -272,10 +273,11 @@ def train(
     )
     print(f"KD alpha (configured): {getattr(config, 'kd_alpha', None)}")
     print(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.1f}%)")
-    print(
-        f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e}"
-    )
-    if train_components == "all":
+    if train_components in ("encoder", "all"):
+        print(
+            f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e}"
+        )
+    if train_components in ("decoder", "all"):
         print(
             f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e}"
         )
@@ -360,14 +362,10 @@ def train(
             f"avg_ce={epoch_ce/n_steps:.4f} avg_kd={epoch_kd/n_steps:.4f}"
         )
 
-        # Validation — CIDEr as primary monitor, KD-loss logged for diagnostics.
-        # CIDEr directly measures caption quality (the fast half of SPIDEr, no Java).
-        # Higher CIDEr = better, so we use > for improvement check.
         monitor = -avg_loss  # fallback if no val set (negated: higher = better)
         val_loss = None
         val_fense = None
         if val_loader is not None:
-            # Log train-loss on val for diagnostics, FENSE as primary monitor
             student.eval()
             val_loss_sum, n_val = 0.0, 0
             with torch.no_grad():

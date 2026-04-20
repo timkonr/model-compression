@@ -1,0 +1,30 @@
+# Decoder-only pruning (50%) + pure KD recovery, encoder frozen
+# Experiment 1: decoder pruned, only decoder trained → encoder bleibt unberührt
+# Run with: mc-train-kd --config experiments/kd_decoder_pruned_clotho_pure_kd_dec.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: null
+  decoder_threshold: 0.5
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: decoder
+  alpha: 0.0
+  lr: 1.0e-5
+  lr_encoder: 1.0e-7
+  num_epochs: 25
+  batch_size: 4
+  grad_accum_steps: 4
+  patience: 10
+  save_dir: checkpoints/kd_decoder_pruned_clotho_pure_kd_dec
+
+data_folder: data/
+model_folder: model/

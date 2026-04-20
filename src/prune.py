@@ -397,6 +397,55 @@ def collect_conette_encoder_activation_scores(
 
 
 @torch.no_grad()
+def collect_conette_decoder_activation_scores(
+    model: nn.Module,
+    loader,
+    num_batches: int = 10,
+    task: str = _UNSET,
+) -> dict[str, torch.Tensor]:
+    """
+    Collect input activation statistics for CoNeTTE decoder linear1 layers.
+
+    Uses inference-mode forward passes (beam search) — the decoder runs
+    autoregressively, so each call yields per-token hidden states. The
+    ActivationCollector handles arbitrary input shapes and aggregates
+    across all generated tokens via its seq=mean, batch=L2 scheme.
+    """
+    if task is _UNSET:
+        task = config.dataset
+    model.eval()
+
+    collectors = {}
+    handles = []
+
+    for li, layer in enumerate(model.model.decoder.layers):
+        if not hasattr(layer, "linear1") or not isinstance(layer.linear1, nn.Linear):
+            continue
+        name = f"model.decoder.layers.{li}.linear1"
+        collector = ActivationCollector(layer.linear1)
+        collectors[name] = collector
+
+        def make_hook(c):
+            def hook_fn(module, inputs, output):
+                c.update(inputs[0])
+            return hook_fn
+
+        handles.append(layer.linear1.register_forward_hook(make_hook(collector)))
+
+    for batch_idx, batch in enumerate(loader):
+        if batch_idx >= num_batches:
+            break
+        audio = batch["audio"]
+        sr = batch["sr"]
+        _ = model(audio, sr, task=task)
+
+    for handle in handles:
+        handle.remove()
+
+    return {name: collector.mean() for name, collector in collectors.items()}
+
+
+@torch.no_grad()
 def prune_conette(
     model: CoNeTTEModel,
     decoder_threshold: Optional[float] = _UNSET,
@@ -435,9 +484,15 @@ def prune_conette(
     model.eval()
     pruned_layer_names = set()
 
-    activation_scores = None
+    encoder_activation_scores = None
+    decoder_activation_scores = None
     if loader is not None and score_mode == "wanda":
-        activation_scores = collect_conette_encoder_activation_scores(
+        encoder_activation_scores = collect_conette_encoder_activation_scores(
+            model,
+            loader=loader,
+            num_batches=num_calibration_batches,
+        )
+        decoder_activation_scores = collect_conette_decoder_activation_scores(
             model,
             loader=loader,
             num_batches=num_calibration_batches,
@@ -450,11 +505,16 @@ def prune_conette(
         dec = model.model.decoder
         for li, layer in enumerate(dec.layers):
             old_hidden = layer.linear1.out_features
+            dec_scores = None
+            if decoder_activation_scores is not None:
+                key = f"model.decoder.layers.{li}.linear1"
+                dec_scores = decoder_activation_scores.get(key)
             new_fc1, new_fc2 = prune_linear_pair(
                 layer.linear1,
                 layer.linear2,
                 threshold=decoder_threshold,
-                score_mode="sum_l2",
+                score_mode=score_mode,
+                activation_scores=dec_scores,
             )
             layer.linear1 = new_fc1
             layer.linear2 = new_fc2
@@ -496,8 +556,8 @@ def prune_conette(
         layer_infos = []
         for stage_idx, block_idx, block, base_name in enc_blocks:
             act = (
-                activation_scores.get(f"{base_name}.pwconv1")
-                if activation_scores
+                encoder_activation_scores.get(f"{base_name}.pwconv1")
+                if encoder_activation_scores
                 else None
             )
             if act is not None:
@@ -580,8 +640,8 @@ def prune_conette(
                 continue
 
             act = (
-                activation_scores.get(f"{base_name}.pwconv1")
-                if activation_scores
+                encoder_activation_scores.get(f"{base_name}.pwconv1")
+                if encoder_activation_scores
                 else None
             )
             if act is not None:
