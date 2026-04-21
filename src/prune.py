@@ -251,8 +251,12 @@ def rebuild_conette_from_dims(
             has_bias1 = block.pwconv1.bias is not None
             has_bias2 = block.pwconv2.bias is not None
             dev, dt = block.pwconv1.weight.device, block.pwconv1.weight.dtype
-            block.pwconv1 = nn.Linear(d_in, target_k, bias=has_bias1).to(device=dev, dtype=dt)
-            block.pwconv2 = nn.Linear(target_k, d_out, bias=has_bias2).to(device=dev, dtype=dt)
+            block.pwconv1 = nn.Linear(d_in, target_k, bias=has_bias1).to(
+                device=dev, dtype=dt
+            )
+            block.pwconv2 = nn.Linear(target_k, d_out, bias=has_bias2).to(
+                device=dev, dtype=dt
+            )
             if verbose:
                 print(f"[Rebuild] {key}: hidden dim set to {target_k}")
 
@@ -268,8 +272,12 @@ def rebuild_conette_from_dims(
         has_bias1 = layer.linear1.bias is not None
         has_bias2 = layer.linear2.bias is not None
         dev, dt = layer.linear1.weight.device, layer.linear1.weight.dtype
-        layer.linear1 = nn.Linear(d_in, target_k, bias=has_bias1).to(device=dev, dtype=dt)
-        layer.linear2 = nn.Linear(target_k, d_out, bias=has_bias2).to(device=dev, dtype=dt)
+        layer.linear1 = nn.Linear(d_in, target_k, bias=has_bias1).to(
+            device=dev, dtype=dt
+        )
+        layer.linear2 = nn.Linear(target_k, d_out, bias=has_bias2).to(
+            device=dev, dtype=dt
+        )
         if verbose:
             print(f"[Rebuild] {key}: hidden dim set to {target_k}")
 
@@ -432,6 +440,7 @@ def collect_conette_decoder_activation_scores(
         def make_hook(c):
             def hook_fn(module, inputs, output):
                 c.update(inputs[0])
+
             return hook_fn
 
         handles.append(layer.linear1.register_forward_hook(make_hook(collector)))
@@ -494,20 +503,26 @@ def prune_conette(
     encoder_activation_scores = None
     decoder_activation_scores = None
     if loader is not None and score_mode == "wanda":
-        encoder_activation_scores = collect_conette_encoder_activation_scores(
-            model,
-            loader=loader,
-            num_batches=num_calibration_batches,
-        )
-        decoder_activation_scores = collect_conette_decoder_activation_scores(
-            model,
-            loader=loader,
-            num_batches=num_calibration_batches,
-            dataset_name=config.dataset,
-        )
+        if (
+            global_pruning_ratio is not None
+            or convnext_3072_threshold is not None
+            or convnext_1536_threshold is not None
+        ):
+            encoder_activation_scores = collect_conette_encoder_activation_scores(
+                model,
+                loader=loader,
+                num_batches=num_calibration_batches,
+            )
+        if decoder_threshold is not None:
+            decoder_activation_scores = collect_conette_decoder_activation_scores(
+                model,
+                loader=loader,
+                num_batches=num_calibration_batches,
+                dataset_name=config.dataset,
+            )
 
     # -------------------------
-    # 1) Decoder pruning (always local — different scale from encoder)
+    # 1) Decoder pruning
     # -------------------------
     if decoder_threshold is not None:
         dec = model.model.decoder
