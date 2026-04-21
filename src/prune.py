@@ -470,7 +470,15 @@ def collect_conette_decoder_activation_scores(
 
         def make_hook(c):
             def hook_fn(module, inputs, output):
-                c.update(inputs[0])
+                x = inputs[0]
+                # CoNeTTE's AACTransformerDecoder uses batch_first=False, so
+                # linear2 sees (tgt_len, batch, hidden_dim). Transpose to
+                # (batch, tgt_len, hidden_dim) before aggregation; otherwise
+                # the collector swaps sequence and batch semantics and ends up
+                # computing an L2 over tokens instead of over samples.
+                if x.ndim == 3:
+                    x = x.transpose(0, 1)
+                c.update(x)
 
             return hook_fn
 
