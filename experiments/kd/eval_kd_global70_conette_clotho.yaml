@@ -1,6 +1,6 @@
-# Evaluate KD-trained student (global pruning ratio=0.5) on Clotho
-# Pruning params MUST match kd_global50_conette_clotho_hybrid.yaml exactly.
-# Run with: mc-run --config experiments/eval_kd_global50_conette_clotho_hybrid.yaml
+# Evaluate KD-trained student (global pruning ratio=0.7) on Clotho
+# Pruning params MUST match kd_global70_conette_clotho.yaml exactly.
+# Run with: mc-run --config experiments/kd/eval_kd_global70_conette_clotho.yaml
 
 model: conette
 dataset: clotho
@@ -11,13 +11,13 @@ technique: kd
 pruning:
   score_mode: wanda
   num_calibration_batches: 128
-  global_pruning_ratio: 0.5
+  global_pruning_ratio: 0.7
   decoder_pruning_ratio: null
   convnext_3072_threshold: null
   convnext_1536_threshold: null
 
 kd:
-  model_path: checkpoints/kd_global50_conette_clotho_hybrid/best
+  model_path: checkpoints/kd_global70_conette_clotho/best
 
 metrics: [spider, fense, meteor]
 inference: true

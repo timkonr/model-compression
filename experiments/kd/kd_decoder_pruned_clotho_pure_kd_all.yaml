@@ -1,6 +1,6 @@
 # Decoder-only pruning (50%) + pure KD recovery, encoder + decoder trained
 # Experiment 2: decoder pruned, beide Komponenten trainiert → Vergleich zu _dec
-# Run with: mc-train-kd --config experiments/kd_decoder_pruned_clotho_pure_kd_all.yaml
+# Run with: mc-train-kd --config experiments/kd/kd_decoder_pruned_clotho_pure_kd_all.yaml
 
 model: conette
 dataset: clotho

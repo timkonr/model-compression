@@ -1,0 +1,29 @@
+# KD recovery after global pruning (ratio=0.7) on Clotho
+# Variant: pure KD (FENSE-only monitoring)
+# Run with: mc-train-kd --config experiments/kd/kd_global70_conette_clotho_pure_kd.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.7
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  alpha: 0.0
+  lr: 1.0e-6
+  lr_encoder: 1.0e-7
+  num_epochs: 25
+  batch_size: 4
+  grad_accum_steps: 4
+  patience: 5
+  save_dir: checkpoints/kd_global70_conette_clotho_pure_kd
+
+data_folder: data/
+model_folder: model/

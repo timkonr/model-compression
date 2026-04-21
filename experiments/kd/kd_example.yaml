@@ -1,4 +1,4 @@
-# KD training config — run with: mc-train-kd --config experiments/kd_example.yaml
+# KD training config — run with: mc-train-kd --config experiments/kd/kd_example.yaml
 #
 # Trains a pruned CoNeTTE student via Knowledge Distillation.
 # The student is pruned internally from the baseline — no pre-saved pruned model needed.

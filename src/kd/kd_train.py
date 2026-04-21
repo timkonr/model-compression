@@ -7,7 +7,7 @@ The student is pruned internally from the baseline — no pre-saved pruned model
 Teacher is always the unpruned baseline (frozen).
 
 Usage:
-    mc-train-kd --config experiments/kd_example.yaml
+    mc-train-kd --config experiments/kd/kd_example.yaml
 """
 
 import os

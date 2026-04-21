@@ -1,6 +1,6 @@
 # KD recovery after global pruning (ratio=0.5) on Clotho
 # Variant: pure KD with alpha=0.1 (FENSE-only monitoring)
-# Run with: mc-train-kd --config experiments/kd_global50_conette_clotho_pure_kd_a01.yaml
+# Run with: mc-train-kd --config experiments/kd/kd_global50_conette_clotho_pure_kd_a01.yaml
 
 model: conette
 dataset: clotho

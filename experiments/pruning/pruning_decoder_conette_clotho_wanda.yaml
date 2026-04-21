@@ -1,5 +1,5 @@
 # Decoder pruning (50%, wanda) — validate vs. sum_l2 baseline
-# Run with: mc-run --config experiments/pruning_decoder_conette_clotho_wanda.yaml
+# Run with: mc-run --config experiments/pruning/pruning_decoder_conette_clotho_wanda.yaml
 
 model: conette
 dataset: clotho

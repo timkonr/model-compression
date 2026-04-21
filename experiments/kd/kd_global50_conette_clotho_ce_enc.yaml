@@ -1,6 +1,6 @@
 # Ablation: CE-only loss, encoder-only training
 # Baseline for the KD ablation: no teacher, only encoder recovers via CE.
-# Run with: mc-train-kd --config experiments/kd_global50_conette_clotho_ce_enc.yaml
+# Run with: mc-train-kd --config experiments/kd/kd_global50_conette_clotho_ce_enc.yaml
 
 model: conette
 dataset: clotho

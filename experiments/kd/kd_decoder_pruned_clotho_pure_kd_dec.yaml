@@ -1,6 +1,6 @@
 # Decoder-only pruning (50%) + pure KD recovery, encoder frozen
 # Experiment 1: decoder pruned, only decoder trained → encoder bleibt unberührt
-# Run with: mc-train-kd --config experiments/kd_decoder_pruned_clotho_pure_kd_dec.yaml
+# Run with: mc-train-kd --config experiments/kd/kd_decoder_pruned_clotho_pure_kd_dec.yaml
 
 model: conette
 dataset: clotho

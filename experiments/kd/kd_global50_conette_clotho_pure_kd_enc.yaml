@@ -1,6 +1,6 @@
-# Ablation: pure KD loss (Minitron BP #5), encoder + decoder training
-# Primary Minitron-aligned configuration: teacher signal guides full model recovery.
-# Run with: mc-train-kd --config experiments/kd_global50_conette_clotho_pure_kd_all.yaml
+# Ablation: pure KD loss (Minitron BP #5), encoder-only training
+# Key question: does teacher supervision help over CE when only the encoder is updated?
+# Run with: mc-train-kd --config experiments/kd/kd_global50_conette_clotho_pure_kd_enc.yaml
 
 model: conette
 dataset: clotho
@@ -16,7 +16,7 @@ pruning:
 
 kd:
   mode: pure_kd
-  train_components: all
+  train_components: encoder
   alpha: 0.0
   lr: 1.0e-6
   lr_encoder: 1.0e-7
@@ -24,7 +24,7 @@ kd:
   batch_size: 4
   grad_accum_steps: 4
   patience: 10
-  save_dir: checkpoints/kd_global50_conette_clotho_pure_kd_all
+  save_dir: checkpoints/kd_global50_conette_clotho_pure_kd_enc
 
 data_folder: data/
 model_folder: model/

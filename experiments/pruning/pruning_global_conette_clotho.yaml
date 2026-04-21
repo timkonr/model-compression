@@ -2,7 +2,7 @@
 # All encoder MLP neurons are ranked globally; least important removed until
 # global_pruning_ratio of total neurons is removed.
 # Per-layer max-normalization ensures cross-layer comparability.
-# Run with: mc-run --config experiments/pruning_global_conette_clotho.yaml
+# Run with: mc-run --config experiments/pruning/pruning_global_conette_clotho.yaml
 
 model: conette
 dataset: clotho

@@ -1,5 +1,6 @@
 # KD recovery after global pruning (ratio=0.7) on Clotho
-# Run with: mc-train-kd --config experiments/kd_global70_conette_clotho.yaml
+# Variant: hybrid KD with alpha=0.1 (FENSE-only monitoring)
+# Run with: mc-train-kd --config experiments/kd/kd_global70_conette_clotho_hybrid_a01.yaml
 
 model: conette
 dataset: clotho
@@ -14,15 +15,15 @@ pruning:
   convnext_1536_threshold: null
 
 kd:
-  mode: pure_kd
-  alpha: 0.5
+  mode: hybrid
+  alpha: 0.1
   lr: 1.0e-6
   lr_encoder: 1.0e-7
   num_epochs: 25
   batch_size: 4
   grad_accum_steps: 4
   patience: 5
-  save_dir: checkpoints/kd_global70_conette_clotho
+  save_dir: checkpoints/kd_global70_conette_clotho_hybrid_a01
 
 data_folder: data/
 model_folder: model/

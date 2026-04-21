@@ -1,6 +1,6 @@
-# Ablation: CE-only loss, encoder + decoder training
-# Isolates the effect of training the decoder to re-adapt to the pruned encoder.
-# Run with: mc-train-kd --config experiments/kd_global50_conette_clotho_ce_all.yaml
+# KD recovery after global pruning (ratio=0.5) on Clotho
+# Variant: hybrid KD with alpha=0.2 (FENSE-only monitoring)
+# Run with: mc-train-kd --config experiments/kd/kd_global50_conette_clotho_hybrid_a02.yaml
 
 model: conette
 dataset: clotho
@@ -15,16 +15,16 @@ pruning:
   convnext_1536_threshold: null
 
 kd:
-  mode: encoder_ce
+  mode: hybrid
   train_components: all
-  alpha: 0.0
+  alpha: 0.01
   lr: 1.0e-6
   lr_encoder: 1.0e-7
   num_epochs: 25
   batch_size: 4
   grad_accum_steps: 4
   patience: 10
-  save_dir: checkpoints/kd_global50_conette_clotho_ce_all
+  save_dir: checkpoints/kd_global50_conette_clotho_hybrid_a02
 
 data_folder: data/
 model_folder: model/

@@ -1,5 +1,5 @@
 # Decoder pruning (50%, random)
-# Run with: mc-run --config experiments/pruning_decoder_conette_clotho_random.yaml
+# Run with: mc-run --config experiments/pruning/pruning_decoder_conette_clotho_random.yaml
 
 model: conette
 dataset: clotho
