@@ -191,7 +191,7 @@ def perform_inference(verbose):
     if config.pruning:
         if config.baseline_model == "conette":
             metadata["pruning_setup"] = {
-                "decoder_threshold": config.decoder_threshold,
+                "decoder_pruning_ratio": config.decoder_pruning_ratio,
                 "convnext_3072_threshold": config.convnext_3072_threshold,
                 "convnext_1536_threshold": config.convnext_1536_threshold,
                 "global_pruning_ratio": getattr(config, "global_pruning_ratio", None),

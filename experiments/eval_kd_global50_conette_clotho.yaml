@@ -12,7 +12,7 @@ pruning:
   score_mode: wanda
   num_calibration_batches: 128
   global_pruning_ratio: 0.5
-  decoder_threshold: null
+  decoder_pruning_ratio: null
   convnext_3072_threshold: null
   convnext_1536_threshold: null
 

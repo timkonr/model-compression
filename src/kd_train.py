@@ -229,21 +229,11 @@ def train(
         # Fallback: train everything if we can't determine what changed
         encoder_pruned = decoder_pruned = True
 
-    # Choose effective training mode based on detected pruning
     if encoder_pruned and not decoder_pruned:
-        # Decoder stays frozen, but allow configured KD mode for encoder recovery.
-        # encoder_ce remains available as an explicit fallback mode.
-        effective_mode = mode
-        print(
-            f"Pruned: encoder only  →  strategy: {effective_mode} with decoder frozen"
-        )
+        print(f"Pruned: encoder only  →  strategy: {mode} (decoder frozen)")
     elif decoder_pruned and not encoder_pruned:
-        # Encoder identical to teacher → KD on logits guides decoder recovery.
-        effective_mode = mode
-        print(f"Pruned: decoder only  →  strategy: {mode} on decoder (encoder frozen)")
+        print(f"Pruned: decoder only  →  strategy: {mode} (encoder frozen)")
     else:
-        # Both pruned (or fallback) — use configured mode on all components
-        effective_mode = mode
         print(f"Pruned: encoder + decoder  →  strategy: {mode}")
 
     # Freeze all, then selectively unfreeze only pruned components
@@ -269,7 +259,7 @@ def train(
     total = sum(p.numel() for p in student.parameters())
     effective_batch = batch_size * grad_accum_steps
     print(
-        f"Fine-tuning | mode={effective_mode} | train_components={train_components} | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size} (effective={effective_batch})"
+        f"Fine-tuning | mode={mode} | train_components={train_components} | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size} (effective={effective_batch})"
     )
     print(f"KD alpha (configured): {getattr(config, 'kd_alpha', None)}")
     print(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.1f}%)")
@@ -308,22 +298,24 @@ def train(
         n_steps = 0
 
         for step, raw_batch in enumerate(train_loader):
-            batch = prepare_batch(student, raw_batch, dataset_name)
-
-            t_audio_batch = None
-            if effective_mode != "encoder_ce" and encoder_pruned:
-                with torch.no_grad():
-                    t_audio_batch = teacher.preprocessor(
-                        raw_batch["audio"], raw_batch["sr"]
-                    )
-
             with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
+                # prepare_batch runs ConvNeXt (preprocessor.encoder) — keep inside
+                # autocast so the encoder forward pass benefits from FP16.
+                batch = prepare_batch(student, raw_batch, dataset_name)
+
+                t_audio_batch = None
+                if mode != "encoder_ce" and encoder_pruned:
+                    with torch.no_grad():
+                        t_audio_batch = teacher.preprocessor(
+                            raw_batch["audio"], raw_batch["sr"]
+                        )
+
                 loss, loss_ce, loss_kd, alpha_value = train_step(
                     student.model,
                     teacher.model,
                     batch,
                     teacher_audio_batch=t_audio_batch,
-                    mode=effective_mode,
+                    mode=mode,
                     alpha=getattr(config, "kd_alpha", 0.5),
                 )
 
@@ -372,7 +364,7 @@ def train(
                 for raw_batch in val_loader:
                     batch = prepare_batch(student, raw_batch, dataset_name)
                     t_audio_batch = None
-                    if effective_mode != "encoder_ce" and encoder_pruned:
+                    if mode != "encoder_ce" and encoder_pruned:
                         t_audio_batch = teacher.preprocessor(
                             raw_batch["audio"], raw_batch["sr"]
                         )
@@ -381,7 +373,7 @@ def train(
                         teacher.model,
                         batch,
                         teacher_audio_batch=t_audio_batch,
-                        mode=effective_mode,
+                        mode=mode,
                         alpha=getattr(config, "kd_alpha", 0.5),
                     )
                     val_loss_sum += loss.item()
@@ -407,7 +399,7 @@ def train(
                     {
                         "epoch": epoch,
                         "val_fense": monitor,
-                        "mode": effective_mode,
+                        "mode": mode,
                         "mode_configured": mode,
                         "train_components": train_components,
                         "temperature": 1.0,
@@ -435,9 +427,9 @@ def train(
                             "global_pruning_ratio": getattr(
                                 config, "global_pruning_ratio", None
                             ),
+                            "decoder_pruning_ratio": config.decoder_pruning_ratio,
                             "convnext_3072_threshold": config.convnext_3072_threshold,
                             "convnext_1536_threshold": config.convnext_1536_threshold,
-                            "decoder_threshold": config.decoder_threshold,
                             "score_mode": config.pruning_score_mode,
                             "num_calibration_batches": config.num_calibration_batches,
                         },

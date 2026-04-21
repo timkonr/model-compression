@@ -31,7 +31,7 @@ def merge(defaults: dict, experiment: dict) -> dict:
 
 
 _CONETTE_PRUNING_KEYS = {
-    "decoder_threshold",
+    "decoder_pruning_ratio",
     "convnext_3072_threshold",
     "convnext_1536_threshold",
 }

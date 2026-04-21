@@ -19,7 +19,7 @@ pruning:
   score_mode: sum_l2
   convnext_3072_threshold: 0.5   # 50% pruning of encoder hidden dims
   convnext_1536_threshold: null
-  decoder_threshold: null
+  decoder_pruning_ratio: null
 
 # KD training hyperparameters
 kd:

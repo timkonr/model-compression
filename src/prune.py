@@ -25,8 +25,8 @@ def compute_linear_hidden_scores(
       first.weight  = (hidden_dim, in_features)
       second.weight = (out_features, hidden_dim)
 
-    For mode="wanda", activation_scores must correspond to the input features
-    of `first`, i.e. shape (in_features,).
+    For mode="wanda", activation_scores must already contain one aggregated
+    importance score per hidden neuron, i.e. shape (hidden_dim,).
     """
     if mode == "random":
         return torch.rand(first.out_features)
@@ -286,72 +286,91 @@ def rebuild_conette_from_dims(
 
 class ActivationCollector:
     """
-    Collect structured Wanda scores for one linear layer pair.
+    Collect Minitron-style activation norms for one FFN hidden dimension.
+
+    Hook this on the INPUT to the DOWN-projection (pwconv2 / linear2) to capture
+    post-GELU hidden-neuron magnitudes. Multiply result() by the DOWN-projection's
+    column norms (||W2_i||) to get the full Minitron importance score.
 
     Aggregation:
-      - sequence/time dimension: mean
-      - batch dimension: L2
+      - sequence/time dimension: mean (PAD positions excluded via sequence_mask)
+      - batch dimension: L2 across the full calibration set
     """
 
-    def __init__(self, first: nn.Linear):
-        self.first = first
-        self.score_sum = None
-        self.num_updates = 0
+    def __init__(self):
+        self.score_sumsq = None
+        self.num_samples = 0
+        self.sequence_mask = None
+
+    def set_sequence_mask(self, mask: Optional[torch.Tensor]) -> None:
+        self.sequence_mask = mask
+
+    def clear_sequence_mask(self) -> None:
+        self.sequence_mask = None
 
     def update(self, tensor: torch.Tensor) -> None:
         """
         tensor shape:
-          - (in_features,)
-          - (batch, in_features)
-          - (batch, seq, in_features)
-          - or any (..., in_features)
+          - (hidden_dim,)
+          - (batch, hidden_dim)
+          - (batch, seq, hidden_dim)
+          - or any (..., hidden_dim)
+
+        tensor is the post-GELU input to the DOWN-projection (linear2 / pwconv2).
         """
-        x = (
-            tensor.detach()
-            .abs()
-            .to(
-                device=self.first.weight.device,
-                dtype=self.first.weight.dtype,
-            )
-        )
+        x = tensor.detach().abs().float()
+        mask = self.sequence_mask
 
         # Case 1: single feature vector
         if x.ndim == 1:
-            # (in_features,) -> (1, 1, in_features)
+            # (hidden_dim,) -> (1, 1, hidden_dim)
             x = x.unsqueeze(0).unsqueeze(0)
+            if mask is not None:
+                mask = mask.reshape(1, -1)
 
-        # Case 2: (batch, in_features)
+        # Case 2: (batch, hidden_dim)
         elif x.ndim == 2:
             # treat as batch with seq len 1
-            x = x.unsqueeze(1)  # (batch, 1, in_features)
+            x = x.unsqueeze(1)  # (batch, 1, hidden_dim)
+            if mask is not None:
+                mask = mask.reshape(x.shape[0], -1)
 
         # Case 3+: collapse all middle dims into sequence dimension
         else:
             batch_size = x.shape[0]
-            x = x.reshape(batch_size, -1, x.shape[-1])  # (batch, seq, in_features)
+            x = x.reshape(batch_size, -1, x.shape[-1])  # (batch, seq, hidden_dim)
+            if mask is not None:
+                mask = mask.reshape(batch_size, -1)
 
-        # first.weight: (hidden_dim, in_features)
-        # want per-sample, per-sequence, per-neuron contributions:
-        # (batch, seq, hidden_dim)
-        scores = torch.matmul(x, self.first.weight.T).abs()
+        # x is (batch, seq, hidden_dim) — post-GELU activations; no matmul needed
+        scores = x
 
-        # seq aggregation = mean
-        scores = scores.mean(dim=1)  # (batch, hidden_dim)
-
-        # batch aggregation = L2
-        scores = torch.norm(scores, p=2, dim=0)  # (hidden_dim,)
-
-        if self.score_sum is None:
-            self.score_sum = scores.clone()
+        if mask is not None:
+            mask = mask.to(device=scores.device, dtype=torch.bool)
+            if mask.shape != scores.shape[:2]:
+                raise RuntimeError(
+                    f"Sequence mask shape {mask.shape} does not match scores "
+                    f"shape {scores.shape[:2]}"
+                )
+            scores = scores.masked_fill(~mask.unsqueeze(-1), 0.0)
+            denom = mask.sum(dim=1, keepdim=True).clamp_min(1).to(dtype=scores.dtype)
+            scores = scores.sum(dim=1) / denom
         else:
-            self.score_sum += scores
+            # seq aggregation = mean(abs)
+            scores = scores.mean(dim=1)  # (batch, hidden_dim)
 
-        self.num_updates += 1
+        # batch aggregation = L2 across the whole calibration set, not per-update mean.
+        batch_sumsq = scores.pow(2).sum(dim=0)  # (hidden_dim,)
+        if self.score_sumsq is None:
+            self.score_sumsq = batch_sumsq.clone()
+        else:
+            self.score_sumsq += batch_sumsq
+        self.num_samples += scores.shape[0]
 
-    def mean(self) -> torch.Tensor:
-        if self.score_sum is None or self.num_updates == 0:
+    def result(self) -> torch.Tensor:
+        if self.score_sumsq is None or self.num_samples == 0:
             raise RuntimeError("No activations collected.")
-        return self.score_sum / self.num_updates
+        return torch.sqrt(self.score_sumsq)
 
 
 @torch.no_grad()
@@ -362,13 +381,18 @@ def collect_conette_encoder_activation_scores(
     task: str = _UNSET,
 ) -> dict[str, torch.Tensor]:
     """
-    Collect input activation statistics for CoNeTTE encoder pwconv1 layers.
+    Collect Minitron-style importance scores for CoNeTTE encoder pwconv pairs.
+
+    Hooks the INPUT to pwconv2 (post-GELU activations), then multiplies by
+    ||pwconv2.weight[:, i]||_2 per neuron — matching Minitron's formula:
+      score_i = ||W_down_i||_2 * L2_calibration(mean_seq(act_i))
     """
     if task is _UNSET:
         task = config.dataset
     model.eval()
 
-    collectors = {}
+    # name -> (ActivationCollector, down_proj)
+    collectors: dict[str, tuple] = {}
     handles = []
 
     for stage_idx, stage in enumerate(model.preprocessor.encoder.stages):
@@ -379,17 +403,17 @@ def collect_conette_encoder_activation_scores(
                 continue
 
             name = f"preprocessor.encoder.stages.{stage_idx}.{block_idx}.pwconv1"
-            collector = ActivationCollector(block.pwconv1)
-            collectors[name] = collector
+            collector = ActivationCollector()
+            collectors[name] = (collector, block.pwconv2)
 
             def make_hook(c):
                 def hook_fn(module, inputs, output):
-                    x = inputs[0]
-                    c.update(x)
+                    c.update(inputs[0])
 
                 return hook_fn
 
-            handles.append(block.pwconv1.register_forward_hook(make_hook(collector)))
+            handles.append(block.pwconv2.register_forward_hook(make_hook(collector)))
+
     for batch_idx, batch in enumerate(loader):
         if batch_idx >= num_batches:
             break
@@ -401,7 +425,12 @@ def collect_conette_encoder_activation_scores(
     for handle in handles:
         handle.remove()
 
-    return {name: collector.mean() for name, collector in collectors.items()}
+    result = {}
+    for name, (collector, down_proj) in collectors.items():
+        act_norms = collector.result()  # (hidden_dim,)
+        w2_norms = down_proj.weight.float().norm(p=2, dim=0)  # (hidden_dim,)
+        result[name] = act_norms * w2_norms
+    return result
 
 
 @torch.no_grad()
@@ -426,16 +455,18 @@ def collect_conette_decoder_activation_scores(
     if dataset_name is _UNSET:
         dataset_name = config.dataset
     model.eval()
+    pad_idx = model.model.tokenizer.pad_token_id
 
-    collectors = {}
+    # name -> (ActivationCollector, down_proj)
+    collectors: dict[str, tuple] = {}
     handles = []
 
     for li, layer in enumerate(model.model.decoder.layers):
         if not hasattr(layer, "linear1") or not isinstance(layer.linear1, nn.Linear):
             continue
         name = f"model.decoder.layers.{li}.linear1"
-        collector = ActivationCollector(layer.linear1)
-        collectors[name] = collector
+        collector = ActivationCollector()
+        collectors[name] = (collector, layer.linear2)
 
         def make_hook(c):
             def hook_fn(module, inputs, output):
@@ -443,7 +474,7 @@ def collect_conette_decoder_activation_scores(
 
             return hook_fn
 
-        handles.append(layer.linear1.register_forward_hook(make_hook(collector)))
+        handles.append(layer.linear2.register_forward_hook(make_hook(collector)))
 
     for batch_idx, raw_batch in enumerate(loader):
         if batch_idx >= num_batches:
@@ -452,19 +483,31 @@ def collect_conette_decoder_activation_scores(
         audio = batch["audio"]
         audio_shape = batch["audio_shape"]
         caps_in = batch["captions"][:, :-1]
+        token_mask = caps_in != pad_idx
+        for collector, _ in collectors.values():
+            collector.set_sequence_mask(token_mask)
         encoder_outs = model.model.encode_audio(audio, audio_shape)
-        _ = model.model.decode_audio(encoder_outs, "forcing", caps_in=caps_in)
+        try:
+            _ = model.model.decode_audio(encoder_outs, "forcing", caps_in=caps_in)
+        finally:
+            for collector, _ in collectors.values():
+                collector.clear_sequence_mask()
 
     for handle in handles:
         handle.remove()
 
-    return {name: collector.mean() for name, collector in collectors.items()}
+    result = {}
+    for name, (collector, down_proj) in collectors.items():
+        act_norms = collector.result()  # (hidden_dim,)
+        w2_norms = down_proj.weight.float().norm(p=2, dim=0)  # (hidden_dim,)
+        result[name] = act_norms * w2_norms
+    return result
 
 
 @torch.no_grad()
 def prune_conette(
     model: CoNeTTEModel,
-    decoder_threshold: Optional[float] = _UNSET,
+    decoder_pruning_ratio: Optional[float] = _UNSET,
     convnext_3072_threshold: Optional[float] = _UNSET,
     convnext_1536_threshold: Optional[float] = _UNSET,
     global_pruning_ratio: Optional[float] = _UNSET,
@@ -476,16 +519,12 @@ def prune_conette(
     """
     Prune CoNeTTE MLP blocks (encoder pwconv pairs + decoder linear pairs).
 
-    Two modes:
-      - Local (default): each layer type gets the same keep-ratio threshold.
-        Set decoder_threshold / convnext_*_threshold; None = skip that component.
-      - Global: rank all neurons across all layers jointly, remove the globally
-        least important ones. Set global_pruning_ratio (fraction to remove).
-        Requires score_mode != "random" to be meaningful.
-        Decoder is excluded from global pruning (different function, different scale).
+    decoder_pruning_ratio: fraction of decoder neurons to REMOVE (None = skip decoder).
+    global_pruning_ratio:  fraction of encoder neurons to REMOVE globally.
+    convnext_*_threshold:  per-layer local keep-ratio for encoder (None = skip).
     """
-    if decoder_threshold is _UNSET:
-        decoder_threshold = config.decoder_threshold
+    if decoder_pruning_ratio is _UNSET:
+        decoder_pruning_ratio = config.decoder_pruning_ratio
     if convnext_3072_threshold is _UNSET:
         convnext_3072_threshold = config.convnext_3072_threshold
     if convnext_1536_threshold is _UNSET:
@@ -513,7 +552,7 @@ def prune_conette(
                 loader=loader,
                 num_batches=num_calibration_batches,
             )
-        if decoder_threshold is not None:
+        if decoder_pruning_ratio is not None:
             decoder_activation_scores = collect_conette_decoder_activation_scores(
                 model,
                 loader=loader,
@@ -524,28 +563,47 @@ def prune_conette(
     # -------------------------
     # 1) Decoder pruning
     # -------------------------
-    if decoder_threshold is not None:
+    if decoder_pruning_ratio is not None:
         dec = model.model.decoder
+        print(
+            f"[Decoder] Global pruning | ratio={decoder_pruning_ratio} | score_mode={score_mode}"
+        )
+
+        layer_scores = []
         for li, layer in enumerate(dec.layers):
-            old_hidden = layer.linear1.out_features
-            dec_scores = None
+            act = None
             if decoder_activation_scores is not None:
                 key = f"model.decoder.layers.{li}.linear1"
-                dec_scores = decoder_activation_scores.get(key)
-            new_fc1, new_fc2 = prune_linear_pair(
-                layer.linear1,
-                layer.linear2,
-                threshold=decoder_threshold,
-                score_mode=score_mode,
-                activation_scores=dec_scores,
+                act = decoder_activation_scores.get(key)
+            if act is not None:
+                act = act.to(device=layer.linear1.weight.device, dtype=layer.linear1.weight.dtype)
+            scores = compute_linear_hidden_scores(
+                layer.linear1, layer.linear2, mode=score_mode, activation_scores=act
             )
+            layer_scores.append(scores)
+
+        # Global keep/remove: rank all neurons jointly, prune bottom fraction
+        all_scores = torch.cat(layer_scores)
+        n_total = len(all_scores)
+        n_keep = max(len(dec.layers), n_total - int(round(n_total * decoder_pruning_ratio)))
+        keep_mask = torch.zeros(n_total, dtype=torch.bool)
+        keep_mask[torch.topk(all_scores, k=n_keep, largest=True).indices] = True
+
+        offsets = torch.tensor([0] + [len(s) for s in layer_scores]).cumsum(0)
+        for li, layer in enumerate(dec.layers):
+            old_hidden = layer.linear1.out_features
+            keep_idx = keep_mask[offsets[li] : offsets[li + 1]].nonzero(as_tuple=True)[0]
+            if len(keep_idx) == 0:
+                keep_idx = layer_scores[li].argmax().unsqueeze(0)
+            new_fc1, new_fc2 = apply_linear_pair_pruning(layer.linear1, layer.linear2, keep_idx)
             layer.linear1 = new_fc1
             layer.linear2 = new_fc2
             pruned_layer_names.add(f"model.decoder.layers.{li}.linear1")
             pruned_layer_names.add(f"model.decoder.layers.{li}.linear2")
             if verbose:
                 print(
-                    f"[Decoder layer {li}] hidden dim: {old_hidden} -> {new_fc1.out_features}"
+                    f"[Decoder layer {li}] hidden dim: {old_hidden} -> {new_fc1.out_features} "
+                    f"(kept {len(keep_idx)}/{old_hidden})"
                 )
 
     # -------------------------
@@ -624,7 +682,6 @@ def prune_conette(
             block_idx = info["block_idx"]
             block = info["block"]
             base_name = info["base_name"]
-            scores = info["scores"]
             old_hidden = info["num_neurons"]
 
             new_pw1, new_pw2 = apply_linear_pair_pruning(

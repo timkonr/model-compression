@@ -31,7 +31,7 @@ pruning = False  # Inference on pruned model
 pruning_score_mode = "sum_l2"  # wanda (consider weights and activations) | sum_l2 (consider in and out strength) | first_l2 (consider only in strength)
 num_calibration_batches = 128  # Number of batches to use for collecting activation stats for pruning (only for wanda score mode)
 ### conette
-decoder_threshold = None
+decoder_pruning_ratio = None
 convnext_3072_threshold = 0.075
 convnext_1536_threshold = None
 global_pruning_ratio = (
@@ -127,7 +127,7 @@ def load_from_yaml(path: str) -> None:
     if "score_mode" in pruning_cfg:
         g["pruning_score_mode"] = pruning_cfg["score_mode"]
     for key in (
-        "decoder_threshold",
+        "decoder_pruning_ratio",
         "convnext_3072_threshold",
         "convnext_1536_threshold",
         "global_pruning_ratio",

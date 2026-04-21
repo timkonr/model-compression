@@ -13,7 +13,7 @@ pruning:
   # CoNeTTE encoder (ConvNeXt blocks with hidden_dim=3072 or 1536)
   convnext_3072_threshold: 0.5   # 50% pruning
   convnext_1536_threshold: null  # null = skip
-  decoder_threshold: null        # null = skip
+  decoder_pruning_ratio: null        # null = skip
   # CLAPCAP (leave null for CoNeTTE experiments)
   gpt_threshold: null
   mapper_threshold: null
