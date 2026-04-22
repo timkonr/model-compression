@@ -31,7 +31,7 @@ def load_model(
             baseline_path, config=CoNeTTEConfig.from_pretrained(baseline_path)
         )
     elif config.baseline_model == "clapcap":
-        model = CLAP(version="clapcap")
+        model = CLAP(version="clapcap", use_cuda=torch.cuda.is_available())
     else:
         raise ValueError(f"Unknown baseline model: {config.baseline_model}")
 
