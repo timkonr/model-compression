@@ -248,11 +248,10 @@ def perform_inference(verbose):
             }
         elif config.baseline_model == "clapcap":
             metadata["pruning_setup"] = {
-                "gpt_threshold": config.gpt_threshold,
-                "htsat_threshold": config.htsat_threshold,
-                "mapper_threshold": config.mapper_threshold,
-                "htsat_min_hidden_dim": config.htsat_min_hidden_dim,
+                "htsat_pruning_ratio": config.htsat_pruning_ratio,
+                "mapper_pruning_ratio": config.mapper_pruning_ratio,
                 "score_mode": config.pruning_score_mode,
+                "num_calibration_batches": config.num_calibration_batches,
             }
 
     return metadata
