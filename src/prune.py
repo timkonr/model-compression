@@ -584,7 +584,9 @@ def prune_conette(
                 key = f"model.decoder.layers.{li}.linear1"
                 act = decoder_activation_scores.get(key)
             if act is not None:
-                act = act.to(device=layer.linear1.weight.device, dtype=layer.linear1.weight.dtype)
+                act = act.to(
+                    device=layer.linear1.weight.device, dtype=layer.linear1.weight.dtype
+                )
             scores = compute_linear_hidden_scores(
                 layer.linear1, layer.linear2, mode=score_mode, activation_scores=act
             )
@@ -593,17 +595,23 @@ def prune_conette(
         # Global keep/remove: rank all neurons jointly, prune bottom fraction
         all_scores = torch.cat(layer_scores)
         n_total = len(all_scores)
-        n_keep = max(len(dec.layers), n_total - int(round(n_total * decoder_pruning_ratio)))
+        n_keep = max(
+            len(dec.layers), n_total - int(round(n_total * decoder_pruning_ratio))
+        )
         keep_mask = torch.zeros(n_total, dtype=torch.bool)
         keep_mask[torch.topk(all_scores, k=n_keep, largest=True).indices] = True
 
         offsets = torch.tensor([0] + [len(s) for s in layer_scores]).cumsum(0)
         for li, layer in enumerate(dec.layers):
             old_hidden = layer.linear1.out_features
-            keep_idx = keep_mask[offsets[li] : offsets[li + 1]].nonzero(as_tuple=True)[0]
+            keep_idx = keep_mask[offsets[li] : offsets[li + 1]].nonzero(as_tuple=True)[
+                0
+            ]
             if len(keep_idx) == 0:
                 keep_idx = layer_scores[li].argmax().unsqueeze(0)
-            new_fc1, new_fc2 = apply_linear_pair_pruning(layer.linear1, layer.linear2, keep_idx)
+            new_fc1, new_fc2 = apply_linear_pair_pruning(
+                layer.linear1, layer.linear2, keep_idx
+            )
             layer.linear1 = new_fc1
             layer.linear2 = new_fc2
             pruned_layer_names.add(f"model.decoder.layers.{li}.linear1")
@@ -820,117 +828,219 @@ def prune_conv1d_pair(
 
 
 @torch.no_grad()
+@torch.no_grad()
+def collect_clapcap_activation_scores(
+    model,
+    audio_paths: list,
+    num_samples: int = 128,
+) -> dict[str, torch.Tensor]:
+    """
+    Collect Minitron-style importance scores for CLAPCAP HTSAT and Mapper MLP pairs.
+
+    Hooks the INPUT to fc2 (post-GELU activations from fc1) in every HTSAT block
+    and every Mapper transformer layer. Runs audio through the encoder and mapper
+    (no GPT-2 generation — hooks fire before generation begins).
+
+    Aggregation: seq=mean, batch=L2 (same formula as CoNeTTE encoder/decoder).
+    Returns dict mapping layer key -> score tensor of shape (hidden_dim,).
+    Each score is: L2_calibration(mean_seq(act_i)) × ||fc2.weight[:, i]||_2
+    """
+    clapcap = model.clapcap
+    clapcap.eval()
+
+    collectors: dict[str, tuple] = {}
+    handles = []
+
+    for stage_idx, stage in enumerate(clapcap.clap.base.htsat.layers):
+        if not hasattr(stage, "blocks"):
+            continue
+        for block_idx, block in enumerate(stage.blocks):
+            if not hasattr(block, "mlp"):
+                continue
+            key = f"htsat.stage{stage_idx}.block{block_idx}"
+            collector = ActivationCollector()
+            collectors[key] = (collector, block.mlp.fc2)
+
+            def make_hook(c):
+                def hook_fn(module, inputs, output):
+                    c.update(inputs[0])
+
+                return hook_fn
+
+            handles.append(block.mlp.fc2.register_forward_hook(make_hook(collector)))
+
+    for i, layer in enumerate(clapcap.clap_project.transformer.layers):
+        key = f"mapper.layer{i}"
+        collector = ActivationCollector()
+        collectors[key] = (collector, layer.mlp.fc2)
+
+        def make_hook(c):
+            def hook_fn(module, inputs, output):
+                c.update(inputs[0])
+
+            return hook_fn
+
+        handles.append(layer.mlp.fc2.register_forward_hook(make_hook(collector)))
+
+    n_collected = 0
+    for path in audio_paths:
+        if n_collected >= num_samples:
+            break
+        try:
+            audio = model.preprocess_audio([path], resample=True).squeeze(1)
+            if torch.cuda.is_available():
+                audio = audio.cuda()
+            prefix, _ = clapcap.clap(audio)
+            if model.args.normalize_prefix:
+                prefix = prefix / prefix.norm(2, -1).reshape(-1, 1)
+            clapcap.clap_project(prefix)
+            n_collected += 1
+            if n_collected % 20 == 0:
+                print(
+                    f"[CLAPCAP calibration] {n_collected}/{num_samples} samples processed"
+                )
+        except Exception as e:
+            print(f"[CLAPCAP calibration] skipping {path}: {e}")
+
+    for handle in handles:
+        handle.remove()
+
+    print(f"[CLAPCAP calibration] done — {n_collected} samples collected")
+
+    result = {}
+    for key, (collector, down_proj) in collectors.items():
+        act_norms = collector.result()  # (hidden_dim,)
+        w2_norms = down_proj.weight.float().norm(p=2, dim=0)  # (hidden_dim,)
+        result[key] = act_norms * w2_norms
+    return result
+
+
 def prune_clapcap(
-    model: nn.Module,
-    gpt_threshold: Optional[float] = _UNSET,
-    mapper_threshold: Optional[float] = _UNSET,
-    htsat_threshold: Optional[float] = _UNSET,
-    htsat_min_hidden_dim: int = _UNSET,
-    score_mode: str = "sum_l2",
+    model,
+    htsat_pruning_ratio: Optional[float] = _UNSET,
+    mapper_pruning_ratio: Optional[float] = _UNSET,
+    score_mode: str = _UNSET,
+    num_calibration_batches: int = _UNSET,
+    audio_paths: Optional[list] = None,
     verbose: bool = True,
-) -> nn.Module:
+):
     """
-    Structured pruning for CLAPCAP on:
-      - GPT2 MLPs        ("Conv1D" pair) -> HuggingFace's Conv1D basically works like a linear layer but the weights are transposed.
-      - Mapper MLPs      (Linear pair)
-      - HTSAT/Swin MLPs  (Linear pair)
+    Structured pruning for CLAPCAP.
+
+    Components pruned:
+      - HTSAT encoder MLP layers (global ratio across all HTSAT stages)
+      - Mapper transformer MLP layers (global ratio across all mapper layers)
+
+    GPT-2 decoder: EXCLUDED. Pruning Conv1D pairs in GPT-2 caused a 6× inference
+    time increase (likely due to non-contiguous weight layout after in-place slicing).
+    The decoder is 227M params but dominates inference time — pruning it is not
+    viable without architectural changes.
+
+    Global pruning within each component uses per-layer max-normalization before
+    ranking, removing cross-layer scale bias (same as CoNeTTE encoder pruning).
     """
-    if gpt_threshold is _UNSET:
-        gpt_threshold = config.gpt_threshold
-    if mapper_threshold is _UNSET:
-        mapper_threshold = config.mapper_threshold
-    if htsat_threshold is _UNSET:
-        htsat_threshold = config.htsat_threshold
-    if htsat_min_hidden_dim is _UNSET:
-        htsat_min_hidden_dim = config.htsat_min_hidden_dim
+    if htsat_pruning_ratio is _UNSET:
+        htsat_pruning_ratio = config.htsat_pruning_ratio
+    if mapper_pruning_ratio is _UNSET:
+        mapper_pruning_ratio = config.mapper_pruning_ratio
+    if score_mode is _UNSET:
+        score_mode = config.pruning_score_mode
+    if num_calibration_batches is _UNSET:
+        num_calibration_batches = config.num_calibration_batches
 
-    model.eval()
+    clapcap = model.clapcap
+    clapcap.eval()
 
-    # -------------------------
-    # 1) GPT2 pruning
-    # -------------------------
-    if gpt_threshold is not None:
-        gpt_blocks = model.gpt.transformer.h
+    htsat_scores: dict[str, torch.Tensor] = {}
+    mapper_scores: dict[str, torch.Tensor] = {}
+    if score_mode == "wanda" and audio_paths:
+        all_scores = collect_clapcap_activation_scores(
+            model, audio_paths=audio_paths, num_samples=num_calibration_batches
+        )
+        htsat_scores = {k: v for k, v in all_scores.items() if k.startswith("htsat")}
+        mapper_scores = {k: v for k, v in all_scores.items() if k.startswith("mapper")}
 
-        for i, block in enumerate(gpt_blocks):
-            old_hidden = block.mlp.c_fc.weight.shape[1]
+    # ── HTSAT global pruning ───────────────────────────────────────────────────
+    if htsat_pruning_ratio is not None:
+        layer_infos = []
 
-            new_c_fc, new_c_proj = prune_conv1d_pair(
-                block.mlp.c_fc,
-                block.mlp.c_proj,
-                threshold=gpt_threshold,
-                score_mode=score_mode,
-            )
-
-            block.mlp.c_fc = new_c_fc
-            block.mlp.c_proj = new_c_proj
-
-            if verbose:
-                print(
-                    f"[GPT2 block {i}] hidden dim: {old_hidden} -> {new_c_fc.weight.shape[1]}"
-                )
-    # -------------------------
-    # 2) Mapper pruning
-    # -------------------------
-    if mapper_threshold is not None:
-        mapper_layers = model.clap_project.transformer.layers
-
-        for i, layer in enumerate(mapper_layers):
-            old_hidden = layer.mlp.fc1.out_features
-
-            new_fc1, new_fc2 = prune_linear_pair(
-                layer.mlp.fc1,
-                layer.mlp.fc2,
-                threshold=mapper_threshold,
-                score_mode=score_mode,
-            )
-
-            layer.mlp.fc1 = new_fc1
-            layer.mlp.fc2 = new_fc2
-
-            if verbose:
-                print(
-                    f"[Mapper layer {i}] hidden dim: {old_hidden} -> {new_fc1.out_features}"
-                )
-
-    # -------------------------
-    # 3) HTSAT / Swin MLP pruning
-    # -------------------------
-    if htsat_threshold is not None:
-        global_block_idx = 0
-
-        for stage_idx, stage in enumerate(model.clap.base.htsat.layers):
+        for stage_idx, stage in enumerate(clapcap.clap.base.htsat.layers):
             if not hasattr(stage, "blocks"):
                 continue
-
             for block_idx, block in enumerate(stage.blocks):
-                current_block_idx = global_block_idx
-                global_block_idx += 1
                 if not hasattr(block, "mlp"):
                     continue
-
-                fc1 = block.mlp.fc1
-                fc2 = block.mlp.fc2
-
-                if fc1.out_features < htsat_min_hidden_dim:
-                    continue
-
-                old_hidden = fc1.out_features
-
-                new_fc1, new_fc2 = prune_linear_pair(
-                    fc1,
-                    fc2,
-                    threshold=htsat_threshold,
-                    score_mode=score_mode,
+                key = f"htsat.stage{stage_idx}.block{block_idx}"
+                fc1, fc2 = block.mlp.fc1, block.mlp.fc2
+                act = htsat_scores.get(key)
+                if act is not None:
+                    act = act.to(device=fc1.weight.device, dtype=fc1.weight.dtype)
+                scores = compute_linear_hidden_scores(
+                    fc1, fc2, mode=score_mode, activation_scores=act
+                )
+                neuron_cost = (
+                    fc1.in_features
+                    + fc2.out_features
+                    + int(fc1.bias is not None)
+                    + int(fc2.bias is not None)
+                )
+                layer_infos.append(
+                    {
+                        "key": key,
+                        "mlp": block.mlp,
+                        "scores": scores,
+                        "num_neurons": fc1.out_features,
+                        "neuron_cost": neuron_cost,
+                    }
                 )
 
-                block.mlp.fc1 = new_fc1
-                block.mlp.fc2 = new_fc2
+        keep_indices = allocate_layerwise_keep_indices(layer_infos, htsat_pruning_ratio)
 
-                if verbose:
-                    print(
-                        f"[HTSAT stage {stage_idx} block {block_idx} | global {current_block_idx}] "
-                        f"hidden dim: {old_hidden} -> {new_fc1.out_features}"
-                    )
+        for info, keep_idx in zip(layer_infos, keep_indices):
+            old_hidden = info["mlp"].fc1.out_features
+            info["mlp"].fc1, info["mlp"].fc2 = apply_linear_pair_pruning(
+                info["mlp"].fc1, info["mlp"].fc2, keep_idx
+            )
+            if verbose:
+                print(
+                    f"[HTSAT {info['key']}] hidden: {old_hidden} → {info['mlp'].fc1.out_features}"
+                )
+
+    # ── Mapper global pruning ──────────────────────────────────────────────────
+    if mapper_pruning_ratio is not None:
+        layer_scores, layer_mlps = [], []
+
+        for i, layer in enumerate(clapcap.clap_project.transformer.layers):
+            key = f"mapper.layer{i}"
+            fc1, fc2 = layer.mlp.fc1, layer.mlp.fc2
+            act = mapper_scores.get(key)
+            if act is not None:
+                act = act.to(device=fc1.weight.device, dtype=fc1.weight.dtype)
+            scores = compute_linear_hidden_scores(
+                fc1, fc2, mode=score_mode, activation_scores=act
+            )
+            layer_scores.append(scores)
+            layer_mlps.append(layer.mlp)
+
+        layer_scores_norm = [s / (s.max() + 1e-12) for s in layer_scores]
+        all_cat = torch.cat(layer_scores_norm)
+        n_total = len(all_cat)
+        n_keep = max(
+            len(layer_mlps), n_total - int(round(n_total * mapper_pruning_ratio))
+        )
+        keep_mask = torch.zeros(n_total, dtype=torch.bool)
+        keep_mask[torch.topk(all_cat, k=n_keep, largest=True).indices] = True
+
+        offsets = torch.tensor([0] + [len(s) for s in layer_scores]).cumsum(0)
+        for i, mlp in enumerate(layer_mlps):
+            keep_idx = keep_mask[offsets[i] : offsets[i + 1]].nonzero(as_tuple=True)[0]
+            if len(keep_idx) == 0:
+                keep_idx = layer_scores[i].argmax().unsqueeze(0)
+            old_hidden = mlp.fc1.out_features
+            mlp.fc1, mlp.fc2 = apply_linear_pair_pruning(mlp.fc1, mlp.fc2, keep_idx)
+            if verbose:
+                print(
+                    f"[Mapper layer {i}] hidden: {old_hidden} → {mlp.fc1.out_features}"
+                )
 
     return model

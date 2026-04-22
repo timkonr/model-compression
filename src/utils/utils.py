@@ -18,6 +18,7 @@ def load_model(
     pruned=False,
     kd=False,
     loader=None,
+    audio_paths=None,
     verbose=True,
 ):
     if model_path is None:
@@ -108,7 +109,7 @@ def load_model(
             )
         elif config.baseline_model == "clapcap":
             print(
-                f"gpt_threshold: {config.gpt_threshold}, htsat_threshold: {config.htsat_threshold}, mapper_threshold: {config.mapper_threshold}, htsat_min_hidden_dim: {config.htsat_min_hidden_dim}, score_mode: {config.pruning_score_mode}"
+                f"htsat_pruning_ratio: {config.htsat_pruning_ratio}, mapper_pruning_ratio: {config.mapper_pruning_ratio}, score_mode: {config.pruning_score_mode}, num_calibration_batches: {config.num_calibration_batches}"
             )
         if config.baseline_model == "conette":
             model, pruned_layer_names = prune_conette(
@@ -120,7 +121,7 @@ def load_model(
             #     pruned_layer_names=pruned_layer_names,
             # )
         elif config.baseline_model == "clapcap":
-            model.clapcap = prune_clapcap(model.clapcap, verbose=True)
+            model = prune_clapcap(model, audio_paths=audio_paths, verbose=True)
     if quantized:
         model = make_quantized_model(
             model, quantization_mode=config.quantization_mode, loader=loader

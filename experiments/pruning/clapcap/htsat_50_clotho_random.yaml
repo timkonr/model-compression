@@ -1,0 +1,18 @@
+model: clapcap
+dataset: clotho
+seed: 42
+
+technique: pruning
+
+pruning:
+  score_mode: random
+  num_calibration_batches: 128
+  htsat_pruning_ratio: 0.5
+  mapper_pruning_ratio: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

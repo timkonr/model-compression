@@ -5,6 +5,7 @@ from aac_datasets import Clotho, AudioCaps
 from aac_datasets.utils.collate import BasicCollate
 import json
 import argparse
+import csv
 from time import perf_counter
 from utils.utils import build_samples, load_model
 from utils.model_size import (
@@ -42,6 +43,48 @@ def _technique_name():
     if config.kd:
         return "kd"
     return "baseline"
+
+
+def _build_clapcap_audio_paths() -> list[str]:
+    """
+    Build a list of audio file paths for CLAPCAP wanda calibration.
+
+    Clotho:    clotho_audio_files/validation/  (clotho_captions_validation.csv)
+    AudioCaps: audio_22050Hz/val/              (val.csv, filename: {youtube_id}_{start_time}.wav)
+    """
+    if config.dataset == "clotho":
+        csv_path = os.path.join(
+            config.data_folder,
+            "CLOTHO_v2.1/clotho_csv_files/clotho_captions_validation.csv",
+        )
+        audio_dir = os.path.join(
+            config.data_folder,
+            "CLOTHO_v2.1/clotho_audio_files/validation",
+        )
+        paths = []
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                p = os.path.join(audio_dir, row["file_name"])
+                if os.path.exists(p):
+                    paths.append(p)
+    else:  # audiocaps
+        csv_path = os.path.join(config.data_folder, "AUDIOCAPS/val.csv")
+        audio_dir = os.path.join(config.data_folder, "AUDIOCAPS/audio_22050Hz/val")
+        paths = []
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                fname = f"{row['youtube_id']}_{row['start_time']}.wav"
+                p = os.path.join(audio_dir, fname)
+                if os.path.exists(p):
+                    paths.append(p)
+
+    if not paths:
+        raise RuntimeError(
+            f"No CLAPCAP calibration audio found. "
+            f"Expected files in {audio_dir} listed in {csv_path}."
+        )
+    print(f"[CLAPCAP calibration] {len(paths)} files from {audio_dir}")
+    return paths
 
 
 def prepare_dataloader(verbose, subset):
@@ -117,20 +160,25 @@ def perform_inference(verbose):
         verbose, subset="test" if config.dataset == "audiocaps" else "eval"
     )
 
-    # calib_loader: held-out subset for activation-aware pruning calibration (score_mode=wanda).
-    # Must NOT be the evaluation subset (data leakage).
-    # Also needed for kd mode — the pruned architecture must be rebuilt with wanda scores.
+    # Calibration data for wanda scoring — must NOT be the evaluation subset.
+    # CoNeTTE: DataLoader with audio tensors (batched forward pass).
+    # CLAPCAP: list of audio file paths (model.preprocess_audio takes file paths).
     needs_calib = config.pruning_score_mode == "wanda" and (config.pruning or config.kd)
     calib_loader = None
+    calib_audio_paths = None
     if needs_calib:
-        calib_subset = "val" if config.dataset == "audiocaps" else "dev"
-        calib_loader = prepare_dataloader(verbose, subset=calib_subset)
+        if config.baseline_model == "conette":
+            calib_subset = "val" if config.dataset == "audiocaps" else "dev"
+            calib_loader = prepare_dataloader(verbose, subset=calib_subset)
+        elif config.baseline_model == "clapcap":
+            calib_audio_paths = _build_clapcap_audio_paths()
 
     model = load_model(
         quantized=config.quantization,
         pruned=config.pruning,
         kd=config.kd,
         loader=calib_loader,
+        audio_paths=calib_audio_paths,
     )
 
     technique = _technique_name()

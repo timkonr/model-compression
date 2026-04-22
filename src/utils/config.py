@@ -39,10 +39,9 @@ global_pruning_ratio = (
 )
 
 ### clapcap
-gpt_threshold = None  # nach 6 stunden abgebrochen
-mapper_threshold = 0.5
-htsat_threshold = 0.75
-htsat_min_hidden_dim = 1536
+htsat_pruning_ratio = None   # global ratio across all HTSAT MLP blocks
+mapper_pruning_ratio = None  # global ratio across all Mapper MLP layers
+# GPT-2 decoder excluded: structured pruning caused 6x inference slowdown
 
 
 ## kd config
@@ -136,10 +135,8 @@ def load_from_yaml(path: str) -> None:
         if key in pruning_cfg:
             g[key] = pruning_cfg[key]
     for key in (
-        "gpt_threshold",
-        "mapper_threshold",
-        "htsat_threshold",
-        "htsat_min_hidden_dim",
+        "htsat_pruning_ratio",
+        "mapper_pruning_ratio",
     ):
         if key in pruning_cfg:
             g[key] = pruning_cfg[key]
