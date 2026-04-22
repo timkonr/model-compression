@@ -1,0 +1,20 @@
+model: conette
+dataset: clotho
+seed: 42
+
+technique: pruning
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
