@@ -301,7 +301,10 @@ def main():
 
     # When the config is a per-experiment config.yaml, save results alongside it
     exp_dir = None
-    if args.config and os.path.basename(args.config) == "config.yaml":
+    if args.config and (
+        os.path.basename(args.config) == "config.yaml"
+        or os.path.basename(args.config) == "quantized.yaml"
+    ):
         exp_dir = os.path.dirname(os.path.abspath(args.config))
 
     quantization_suffix = config.quantization and "_quantized" or ""
