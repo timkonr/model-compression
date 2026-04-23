@@ -1,0 +1,20 @@
+{
+  "model": "clapcap",
+  "compression_technique": "quantization",
+  "dataset": "audiocaps",
+  "seed": 42,
+  "model_size_mb": 613.557921,
+  "unquantized_parameters": 128077479,
+  "flops": null,
+  "device": "cpu",
+  "inference_time_in_s": "5016.281",
+  "evaluation_results": {
+    "cider_d": 0.5158414190011624,
+    "spice": 0.1563037598752151,
+    "spider": 0.33607258943818874,
+    "sbert_sim": 0.5757869047384996,
+    "fer": 0.06666666666666667,
+    "fense": 0.5445648812124363,
+    "meteor": 0.21207072573282135
+  }
+}

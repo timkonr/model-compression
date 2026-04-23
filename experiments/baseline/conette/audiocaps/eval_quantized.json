@@ -1,0 +1,20 @@
+{
+  "model": "conette",
+  "compression_technique": "quantization",
+  "dataset": "audiocaps",
+  "seed": 42,
+  "model_size_mb": 89.144871,
+  "unquantized_parameters": 11304352,
+  "flops": null,
+  "device": "cpu",
+  "inference_time_in_s": "298.411",
+  "evaluation_results": {
+    "cider_d": 0.713439617608364,
+    "spice": 0.1711641618894636,
+    "spider": 0.4423018897489138,
+    "sbert_sim": 0.6117578458518554,
+    "fer": 0.003076923076923077,
+    "fense": 0.6101549537006097,
+    "meteor": 0.23087958239423098
+  }
+}

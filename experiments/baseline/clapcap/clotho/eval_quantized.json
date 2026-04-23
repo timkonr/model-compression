@@ -1,0 +1,20 @@
+{
+  "model": "clapcap",
+  "compression_technique": "quantization",
+  "dataset": "clotho",
+  "seed": 42,
+  "model_size_mb": 613.557921,
+  "unquantized_parameters": 128077479,
+  "flops": null,
+  "device": "cpu",
+  "inference_time_in_s": "5663.110",
+  "evaluation_results": {
+    "cider_d": 0.40335697376941104,
+    "spice": 0.1271741619611998,
+    "spider": 0.2652655678653054,
+    "sbert_sim": 0.5054472517667775,
+    "fer": 0.0430622009569378,
+    "fense": 0.48838864733442744,
+    "meteor": 0.17544602472804194
+  }
+}
