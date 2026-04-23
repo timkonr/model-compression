@@ -1,7 +1,6 @@
-# Evaluate baseline CoNeTTE on Clotho.
-# Run with: mc-run --config experiments/eval_baseline_conette_clotho.yaml
+# Evaluate baseline CLAPCAP on Clotho.
 
-model: conette
+model: clapcap
 dataset: clotho
 seed: 42
 
