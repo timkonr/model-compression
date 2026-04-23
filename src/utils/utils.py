@@ -31,7 +31,8 @@ def load_model(
             baseline_path, config=CoNeTTEConfig.from_pretrained(baseline_path)
         )
     elif config.baseline_model == "clapcap":
-        model = CLAP(version="clapcap", use_cuda=torch.cuda.is_available())
+        use_cuda = torch.cuda.is_available() and not quantized
+        model = CLAP(version="clapcap", use_cuda=use_cuda)
     else:
         raise ValueError(f"Unknown baseline model: {config.baseline_model}")
 
@@ -62,8 +63,11 @@ def load_model(
             state_dict_path = os.path.join(kd_path, "model.safetensors")
         if os.path.exists(state_dict_path) and state_dict_path.endswith(".bin"):
             state_dict = torch.load(state_dict_path, map_location="cpu")
-        elif os.path.exists(state_dict_path) and state_dict_path.endswith(".safetensors"):
+        elif os.path.exists(state_dict_path) and state_dict_path.endswith(
+            ".safetensors"
+        ):
             from safetensors.torch import load_file
+
             state_dict = load_file(state_dict_path)
         else:
             raise FileNotFoundError(f"No model weights found in {kd_path}")
@@ -86,7 +90,9 @@ def load_model(
                 elif key.endswith(".linear1.weight") and "decoder" in key:
                     layer_key = key[: -len(".linear1.weight")]
                     hidden_dims[layer_key] = tensor.shape[0]
-            print(f"[KD load] Extracted hidden_dims for {len(hidden_dims)} layers from state dict")
+            print(
+                f"[KD load] Extracted hidden_dims for {len(hidden_dims)} layers from state dict"
+            )
 
         print(
             f"[KD load] Rebuilding architecture from hidden_dims ({len(hidden_dims)} layers)"
@@ -126,7 +132,6 @@ def load_model(
         model = make_quantized_model(
             model, quantization_mode=config.quantization_mode, loader=loader
         )
-    # model.to("cpu")  # ensure model is on CPU
     if verbose:
         new_model_type = (
             "Pruned and quantized"
