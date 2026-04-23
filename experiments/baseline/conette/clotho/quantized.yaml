@@ -1,0 +1,14 @@
+# Evaluate baseline CoNeTTE on Clotho.
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: quantization
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

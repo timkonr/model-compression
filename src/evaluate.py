@@ -304,13 +304,14 @@ def main():
     if args.config and os.path.basename(args.config) == "config.yaml":
         exp_dir = os.path.dirname(os.path.abspath(args.config))
 
+    quantization_suffix = config.quantization and "_quantized" or ""
     if args.path:
         result = load_previous_results(args.path)
     elif config.inference:
         result = perform_inference(args.verbose)
         if exp_dir or config.save_inference_results:
             if exp_dir:
-                fpath = os.path.join(exp_dir, "inference.json")
+                fpath = os.path.join(exp_dir, f"inference{quantization_suffix}.json")
             else:
                 fpath = f"results/inference_{result['compression_technique']}_{result['dataset']}_{ts}.json"
             save_result(result, fpath)
@@ -320,7 +321,7 @@ def main():
     if config.evaluation:
         result = perform_evaluation(result)
         if exp_dir:
-            filename = os.path.join(exp_dir, "eval.json")
+            filename = os.path.join(exp_dir, f"eval{quantization_suffix}.json")
         else:
             filename = f"results/eval_{result['compression_technique']}_{result['dataset']}_{ts}.json"
         print(f"saving evaluation results to {filename}")
