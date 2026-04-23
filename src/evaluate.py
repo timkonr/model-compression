@@ -265,7 +265,7 @@ def load_previous_results(path):
 
 
 def save_result(result, fpath):
-    os.makedirs("results", exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(fpath)), exist_ok=True)
     with open(fpath, "w") as fp:
         json.dump(result, fp, indent=2)
 
@@ -299,21 +299,30 @@ def main():
 
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
+    # When the config is a per-experiment config.yaml, save results alongside it
+    exp_dir = None
+    if args.config and os.path.basename(args.config) == "config.yaml":
+        exp_dir = os.path.dirname(os.path.abspath(args.config))
+
     if args.path:
         result = load_previous_results(args.path)
     elif config.inference:
         result = perform_inference(args.verbose)
-        if config.save_inference_results:
-            save_result(
-                result,
-                f"results/inference_{result['compression_technique']}_{result['dataset']}_{ts}.json",
-            )
+        if exp_dir or config.save_inference_results:
+            if exp_dir:
+                fpath = os.path.join(exp_dir, "inference.json")
+            else:
+                fpath = f"results/inference_{result['compression_technique']}_{result['dataset']}_{ts}.json"
+            save_result(result, fpath)
     else:
         raise ValueError("inference=False but no --path given")
 
     if config.evaluation:
         result = perform_evaluation(result)
-        filename = f"results/eval_{result['compression_technique']}_{result['dataset']}_{ts}.json"
+        if exp_dir:
+            filename = os.path.join(exp_dir, "eval.json")
+        else:
+            filename = f"results/eval_{result['compression_technique']}_{result['dataset']}_{ts}.json"
         print(f"saving evaluation results to {filename}")
         save_result(result, filename)
 

@@ -1,0 +1,26 @@
+{
+  "model": "clapcap",
+  "compression_technique": "pruning",
+  "dataset": "clotho",
+  "seed": 42,
+  "model_size_mb": 861.359895,
+  "unquantized_parameters": 214827117,
+  "flops": 941701799168,
+  "device": "cuda:0",
+  "inference_time_in_s": "359.823",
+  "pruning_setup": {
+    "htsat_pruning_ratio": 0.7,
+    "mapper_pruning_ratio": null,
+    "score_mode": "wanda",
+    "num_calibration_batches": 128
+  },
+  "evaluation_results": {
+    "cider_d": 0.3628739263209826,
+    "spice": 0.1214497667425767,
+    "spider": 0.24216184653177963,
+    "sbert_sim": 0.4809323526223738,
+    "fer": 0.045933014354066985,
+    "fense": 0.464292841070648,
+    "meteor": 0.1678233372547198
+  }
+}

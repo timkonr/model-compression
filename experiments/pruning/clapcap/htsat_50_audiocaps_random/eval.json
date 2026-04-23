@@ -1,0 +1,26 @@
+{
+  "model": "clapcap",
+  "compression_technique": "pruning",
+  "dataset": "audiocaps",
+  "seed": 42,
+  "model_size_mb": 875.180183,
+  "unquantized_parameters": 218282183,
+  "flops": 710857642496,
+  "device": "cuda:0",
+  "inference_time_in_s": "255.218",
+  "pruning_setup": {
+    "htsat_pruning_ratio": 0.5,
+    "mapper_pruning_ratio": null,
+    "score_mode": "random",
+    "num_calibration_batches": 128
+  },
+  "evaluation_results": {
+    "cider_d": 0.5318892078885763,
+    "spice": 0.15814773133886711,
+    "spider": 0.34501846961372173,
+    "sbert_sim": 0.5770853099647241,
+    "fer": 0.07179487179487179,
+    "fense": 0.5414962144753872,
+    "meteor": 0.2130518899215112
+  }
+}
