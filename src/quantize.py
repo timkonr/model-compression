@@ -35,6 +35,7 @@ def make_quantized_model(model: torch.nn.Module, dtype=torch.qint8) -> torch.nn.
             m.clap_project = torch.compile(
                 m.clap_project, mode="max-autotune", fullgraph=True, dynamic=True
             )
+            m = m.to(torch.device("cuda")).eval()
         else:
             torch.quantization.quantize_dynamic(
                 m.clap, {torch.nn.Linear}, dtype=dtype, inplace=True
