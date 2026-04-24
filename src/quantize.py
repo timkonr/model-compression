@@ -12,7 +12,7 @@ def make_quantized_model(model: torch.nn.Module, dtype=torch.qint8) -> torch.nn.
     # i.e. it works only for a fixed input shape,
     # which would require us to define a specific length for the input audio files and adapt the preprocessor in the process
     m = model if config.baseline_model == "conette" else model.clapcap
-
+    m.eval()
     total_params = get_model_params(m)
 
     if config.baseline_model == "conette":
