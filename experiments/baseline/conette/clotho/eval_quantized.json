@@ -3,18 +3,18 @@
   "compression_technique": "quantization",
   "dataset": "clotho",
   "seed": 42,
-  "model_size_mb": 89.144871,
-  "unquantized_parameters": 11304352,
+  "model_size_mb": 89.953385,
+  "unquantized_parameters": 49208923,
   "flops": null,
-  "device": "cpu",
-  "inference_time_in_s": "638.990",
+  "device": "cuda:0",
+  "inference_time_in_s": "186.443",
   "evaluation_results": {
-    "cider_d": 0.4881709209004937,
-    "spice": 0.13826703040989058,
-    "spider": 0.31321897565519213,
-    "sbert_sim": 0.5178055658045283,
+    "cider_d": 0.4821469736295669,
+    "spice": 0.1380590475979693,
+    "spider": 0.3101030106137681,
+    "sbert_sim": 0.5188126065692548,
     "fer": 0.0009569377990430622,
-    "fense": 0.5171937881167711,
-    "meteor": 0.19235090104114358
+    "fense": 0.5182008287788293,
+    "meteor": 0.19234025284629433
   }
 }
