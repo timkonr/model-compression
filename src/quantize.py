@@ -17,7 +17,8 @@ def make_quantized_model(model: torch.nn.Module, dtype=torch.qint8) -> torch.nn.
 
     if config.baseline_model == "conette":
         if torch.cuda.is_available():
-            quantize_(model, Int8DynamicActivationInt8WeightConfig())
+            quantize_(m, Int8DynamicActivationInt8WeightConfig())
+            m = torch.compile(m, mode="max-autotune", fullgraph=True)
         else:
             m.cpu()
             m = torch.quantization.quantize_dynamic(
