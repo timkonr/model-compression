@@ -27,8 +27,8 @@ def make_quantized_model(model: torch.nn.Module, dtype=torch.qint8) -> torch.nn.
     elif config.baseline_model == "clapcap":
         # for clapcap we only quantize the encoder (m.clap) and the CLAP projection (m.clap_project)
         if torch.cuda.is_available():
-            quantize_(model.clap, Int8WeightOnlyConfig())
-            quantize_(model.clap_project, Int8WeightOnlyConfig())
+            quantize_(m.clap, Int8WeightOnlyConfig())
+            quantize_(m.clap_project, Int8WeightOnlyConfig())
             m.clap = torch.compile(
                 m.clap, mode="max-autotune", fullgraph=True, dynamic=True
             )
