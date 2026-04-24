@@ -4,7 +4,7 @@ from utils.model_size import (
     get_model_params,
 )
 from utils import config
-from torchao.quantization import Int8DynamicActivationInt8WeightConfig, quantize_
+from torchao.quantization import Int4WeightOnlyConfig, quantize_
 
 
 def make_quantized_model(model: torch.nn.Module, dtype=torch.qint8) -> torch.nn.Module:
@@ -17,7 +17,7 @@ def make_quantized_model(model: torch.nn.Module, dtype=torch.qint8) -> torch.nn.
 
     if config.baseline_model == "conette":
         if torch.cuda.is_available():
-            quantize_(m, Int8DynamicActivationInt8WeightConfig())
+            quantize_(m, Int4WeightOnlyConfig())
             m = torch.compile(m, mode="max-autotune", fullgraph=True)
         else:
             m.cpu()
@@ -27,8 +27,8 @@ def make_quantized_model(model: torch.nn.Module, dtype=torch.qint8) -> torch.nn.
     elif config.baseline_model == "clapcap":
         # for clapcap we only quantize the encoder (m.clap) and the CLAP projection (m.clap_project)
         if torch.cuda.is_available():
-            quantize_(model.clap, Int8DynamicActivationInt8WeightConfig())
-            quantize_(model.clap_project, Int8DynamicActivationInt8WeightConfig())
+            quantize_(model.clap, Int4WeightOnlyConfig())
+            quantize_(model.clap_project, Int4WeightOnlyConfig())
         else:
             torch.quantization.quantize_dynamic(
                 m.clap, {torch.nn.Linear}, dtype=dtype, inplace=True
