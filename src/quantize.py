@@ -4,7 +4,11 @@ from utils.model_size import (
     get_model_params,
 )
 from utils import config
-from torchao.quantization import Int8WeightOnlyConfig, quantize_
+from torchao.quantization import (
+    Int8DynamicActivationInt8WeightConfig,
+    Int8WeightOnlyConfig,
+    quantize_,
+)
 
 
 def make_quantized_model(model: torch.nn.Module, dtype=torch.qint8) -> torch.nn.Module:
@@ -17,7 +21,7 @@ def make_quantized_model(model: torch.nn.Module, dtype=torch.qint8) -> torch.nn.
 
     if config.baseline_model == "conette":
         if torch.cuda.is_available():
-            quantize_(m, Int8WeightOnlyConfig())
+            quantize_(m, Int8DynamicActivationInt8WeightConfig())
             m = torch.compile(m, mode="max-autotune", fullgraph=True, dynamic=True)
         else:
             m.cpu()
