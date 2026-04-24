@@ -5,7 +5,6 @@ from prune import prune_clapcap, prune_conette, rebuild_conette_from_dims
 from utils import config
 from quantize import make_quantized_model
 from utils.model_size import get_model_size, get_model_params
-from torch.utils.data import DataLoader
 from msclap import CLAP
 import csv
 import os
@@ -129,9 +128,7 @@ def load_model(
         elif config.baseline_model == "clapcap":
             model = prune_clapcap(model, audio_paths=audio_paths, verbose=True)
     if quantized:
-        model = make_quantized_model(
-            model, quantization_mode=config.quantization_mode, loader=loader
-        )
+        model = make_quantized_model(model)
     if verbose:
         new_model_type = (
             "Pruned and quantized"
