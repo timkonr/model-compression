@@ -5,10 +5,10 @@ conette==0.1.4
 msclap==1.3.4
 numpy~=1.26
 transformers==4.39.3
---extra-index-url https://download.pytorch.org/whl/cu118
-torch==2.2.2+cu118
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch==2.11.0+cu126
 torchao==0.16.0
-torchvision==0.17.2+cu118
-torchaudio==2.2.2+cu118
+torchvision==0.26.0+cu126
+torchaudio==2.11.0+cu126
 torch-pruning==1.5.1
 yt-dlp~=2025.2.19
