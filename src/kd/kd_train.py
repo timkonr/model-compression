@@ -280,17 +280,38 @@ def train(
         optimizer, T_max=total_steps, eta_min=lr / 100
     )
 
-    best_val_metric = -math.inf  # monitor is maximized (FENSE when val loader exists)
+    best_val_metric = math.inf
     epochs_no_improve = 0
     os.makedirs(save_dir, exist_ok=True)
 
-    # Baseline FENSE before any training — validates pruned model quality
-    if val_loader is not None:
-        init_fense = run_fense_val(student, val_loader, dataset_name)
-        print(f"Pre-training FENSE (pruned, no KD): {init_fense:.4f}")
-        best_val_metric = init_fense  # start from pruned baseline, not -inf
-    else:
-        init_fense = None
+    with open(os.path.join(save_dir, "run_config.json"), "w") as f:
+        json.dump(
+            {
+                "mode": mode,
+                "train_components": train_components,
+                "dataset": dataset_name,
+                "num_epochs": num_epochs,
+                "batch_size": batch_size,
+                "grad_accum_steps": grad_accum_steps,
+                "lr": lr,
+                "lr_encoder": lr_encoder,
+                "patience": patience,
+                "alpha": getattr(config, "kd_alpha", None),
+                "encoder_pruned": encoder_pruned,
+                "decoder_pruned": decoder_pruned,
+                "hidden_dims": student_hidden_dims,
+                "pruning": {
+                    "global_pruning_ratio": getattr(config, "global_pruning_ratio", None),
+                    "decoder_pruning_ratio": config.decoder_pruning_ratio,
+                    "convnext_3072_threshold": config.convnext_3072_threshold,
+                    "convnext_1536_threshold": config.convnext_1536_threshold,
+                    "score_mode": config.pruning_score_mode,
+                    "num_calibration_batches": config.num_calibration_batches,
+                },
+            },
+            f,
+            indent=2,
+        )
 
     for epoch in range(num_epochs):
         student.train()
@@ -349,9 +370,8 @@ def train(
             f"avg_ce={epoch_ce/n_steps:.4f} avg_kd={epoch_kd/n_steps:.4f}"
         )
 
-        monitor = -avg_loss  # fallback if no val set (negated: higher = better)
+        monitor = avg_loss
         val_loss = None
-        val_fense = None
         if val_loader is not None:
             student.eval()
             val_loss_sum, n_val = 0.0, 0
@@ -374,10 +394,9 @@ def train(
                     val_loss_sum += loss.item()
                     n_val += 1
             val_loss = val_loss_sum / max(n_val, 1)
-            val_fense = run_fense_val(student, val_loader, dataset_name)
-            monitor = val_fense  # higher = better
-            print(f"  val_loss={val_loss:.4f}  val_fense={val_fense:.4f}")
-        is_best = monitor > best_val_metric
+            monitor = val_loss
+            print(f"  val_loss={val_loss:.4f}")
+        is_best = monitor < best_val_metric
         if is_best:
             best_val_metric = monitor
             epochs_no_improve = 0
@@ -390,50 +409,8 @@ def train(
                 student.state_dict(), os.path.join(best_path, "pytorch_model.bin")
             )
             with open(os.path.join(best_path, "meta.json"), "w") as f:
-                json.dump(
-                    {
-                        "epoch": epoch,
-                        "val_fense": monitor,
-                        "mode": mode,
-                        "mode_configured": mode,
-                        "train_components": train_components,
-                        "temperature": 1.0,
-                        "alpha": getattr(config, "kd_alpha", None),
-                        "lr": lr,
-                        "lr_encoder": lr_encoder,
-                        "dataset": dataset_name,
-                        "encoder_pruned": encoder_pruned,
-                        "decoder_pruned": decoder_pruned,
-                        "trainable_params": {
-                            "trainable": trainable,
-                            "total": total,
-                            "encoder": (
-                                sum(p.numel() for p in encoder_params)
-                                if encoder_pruned
-                                else 0
-                            ),
-                            "decoder_projection": (
-                                sum(p.numel() for p in decoder_params)
-                                if decoder_pruned
-                                else 0
-                            ),
-                        },
-                        "pruning": {
-                            "global_pruning_ratio": getattr(
-                                config, "global_pruning_ratio", None
-                            ),
-                            "decoder_pruning_ratio": config.decoder_pruning_ratio,
-                            "convnext_3072_threshold": config.convnext_3072_threshold,
-                            "convnext_1536_threshold": config.convnext_1536_threshold,
-                            "score_mode": config.pruning_score_mode,
-                            "num_calibration_batches": config.num_calibration_batches,
-                        },
-                        "hidden_dims": student_hidden_dims,
-                    },
-                    f,
-                    indent=2,
-                )
-            print(f"  => New best saved (val_fense={monitor:.4f})")
+                json.dump({"epoch": epoch, "val_loss": monitor}, f, indent=2)
+            print(f"  => New best saved (val_loss={monitor:.4f})")
         else:
             epochs_no_improve += 1
             print(f"  No improvement ({epochs_no_improve}/{patience})")
@@ -446,7 +423,6 @@ def train(
                     "train_ce": round(epoch_ce / n_steps, 6),
                     "train_kd": round(epoch_kd / n_steps, 6),
                     "val_loss": round(val_loss, 6) if val_loss is not None else None,
-                    "val_fense": round(val_fense, 6) if val_fense is not None else None,
                     "is_best": is_best,
                     "lr": scheduler.get_last_lr(),
                 },
