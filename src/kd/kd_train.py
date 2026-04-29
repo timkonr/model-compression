@@ -284,8 +284,6 @@ def train(
     epochs_no_improve = 0
     os.makedirs(save_dir, exist_ok=True)
 
-    scaler = torch.cuda.amp.GradScaler(enabled=torch.cuda.is_available())
-
     # Baseline FENSE before any training — validates pruned model quality
     if val_loader is not None:
         init_fense = run_fense_val(student, val_loader, dataset_name)
@@ -300,34 +298,29 @@ def train(
         n_steps = 0
 
         for step, raw_batch in enumerate(train_loader):
-            with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
-                # prepare_batch runs ConvNeXt (preprocessor.encoder) — keep inside
-                # autocast so the encoder forward pass benefits from FP16.
-                batch = prepare_batch(student, raw_batch, dataset_name)
+            batch = prepare_batch(student, raw_batch, dataset_name)
 
-                t_audio_batch = None
-                if mode != "encoder_ce" and encoder_pruned:
-                    with torch.no_grad():
-                        t_audio_batch = teacher.preprocessor(
-                            raw_batch["audio"], raw_batch["sr"]
-                        )
+            t_audio_batch = None
+            if mode != "encoder_ce" and encoder_pruned:
+                with torch.no_grad():
+                    t_audio_batch = teacher.preprocessor(
+                        raw_batch["audio"], raw_batch["sr"]
+                    )
 
-                loss, loss_ce, loss_kd, alpha_value = train_step(
-                    student.model,
-                    teacher.model,
-                    batch,
-                    teacher_audio_batch=t_audio_batch,
-                    mode=mode,
-                    alpha=getattr(config, "kd_alpha", 0.5),
-                )
+            loss, loss_ce, loss_kd, alpha_value = train_step(
+                student.model,
+                teacher.model,
+                batch,
+                teacher_audio_batch=t_audio_batch,
+                mode=mode,
+                alpha=getattr(config, "kd_alpha", 0.5),
+            )
 
-            # Gradient accumulation: scale loss, accumulate, step every grad_accum_steps
-            scaler.scale(loss / grad_accum_steps).backward()
+            # Gradient accumulation
+            (loss / grad_accum_steps).backward()
             if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(train_loader):
-                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
-                scaler.step(optimizer)
-                scaler.update()
+                optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()
 
