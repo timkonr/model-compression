@@ -11,6 +11,7 @@ Usage:
 """
 
 import os
+
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 import argparse
@@ -29,7 +30,6 @@ from torch.utils.data import DataLoader
 from finetune import prepare_batch
 from prune import get_conette_hidden_dims, prune_conette
 from utils import config
-
 
 # ---------------------------------------------------------------------------
 # KD-specific loss
@@ -90,7 +90,9 @@ def train_step(
     caps_in, caps_out = batch["captions"][:, :-1], batch["captions"][:, 1:]
 
     encoder_outs = student_plm.encode_audio(audio, audio_shape)
-    student_logits = student_plm.decode_audio(encoder_outs, "forcing", caps_in=caps_in)
+    student_logits = student_plm.decode_audio(
+        encoder_outs, "forcing", caps_in=caps_in
+    ).float()
     loss_ce = student_plm.train_criterion(student_logits, caps_out)
 
     if mode == "encoder_ce":
@@ -109,7 +111,7 @@ def train_step(
         teacher_enc = teacher_plm.encode_audio(t_audio, t_audio_shape)
         teacher_logits = teacher_plm.decode_audio(
             teacher_enc, "forcing", caps_in=caps_in
-        )
+        ).float()
 
     pad_idx = student_plm.tokenizer.pad_token_id
     loss_kd = kd_loss(student_logits, teacher_logits, caps_out, pad_idx)
