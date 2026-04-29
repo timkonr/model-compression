@@ -52,9 +52,17 @@ def load_model(
 
         with open(os.path.join(kd_path, "meta.json"), "r") as f:
             kd_config = json.load(f)
-            print(
-                f"KD checkpoint was trained with pruning config: {kd_config['pruning']}"
-            )
+
+        # run_config.json (one level up) has full hyperparameters; meta.json has epoch/val_loss
+        run_config_path = os.path.join(os.path.dirname(kd_path), "run_config.json")
+        if os.path.exists(run_config_path):
+            with open(run_config_path) as f:
+                run_config = json.load(f)
+            kd_config.setdefault("pruning", run_config.get("pruning"))
+            kd_config.setdefault("hidden_dims", run_config.get("hidden_dims"))
+            print(f"KD checkpoint pruning config: {kd_config.get('pruning')}")
+        else:
+            print(f"KD checkpoint pruning config: {kd_config.get('pruning', 'unknown')}")
 
         # Load state dict (always needed — also used to extract dims in legacy path)
         state_dict_path = os.path.join(kd_path, "pytorch_model.bin")
