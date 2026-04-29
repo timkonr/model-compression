@@ -5,9 +5,9 @@
   "seed": 42,
   "model_size_mb": 135.264999,
   "unquantized_parameters": 32370884,
-  "flops": 73708615987,
+  "flops": 73137776947,
   "device": "cuda:0",
-  "inference_time_in_s": "157.882",
+  "inference_time_in_s": "162.078",
   "pruning_setup": {
     "decoder_pruning_ratio": null,
     "convnext_3072_threshold": null,
@@ -17,12 +17,12 @@
     "num_calibration_batches": 128
   },
   "evaluation_results": {
-    "cider_d": 0.36663271542818443,
-    "spice": 0.11680928386766201,
-    "spider": 0.2417209996479232,
-    "sbert_sim": 0.44647153031580045,
-    "fer": 0.0028708133971291866,
-    "fense": 0.4450274728215411,
-    "meteor": 0.17252672865721766
+    "cider_d": 0.3547007426488157,
+    "spice": 0.11267875825209463,
+    "spider": 0.23368975045045515,
+    "sbert_sim": 0.44014969577691987,
+    "fer": 0.0009569377990430622,
+    "fense": 0.4395874512258864,
+    "meteor": 0.17058133454579777
   }
 }
