@@ -3,18 +3,18 @@
   "compression_technique": "quantization",
   "dataset": "audiocaps",
   "seed": 42,
-  "model_size_mb": 89.953385,
+  "model_size_mb": 89.410024,
   "unquantized_parameters": 49208923,
   "flops": null,
   "device": "cuda:0",
-  "inference_time_in_s": "123.897",
+  "inference_time_in_s": "565.460",
   "evaluation_results": {
-    "cider_d": 0.7277807324404804,
-    "spice": 0.17152491377323487,
-    "spider": 0.4496528231068576,
-    "sbert_sim": 0.6143028437059659,
+    "cider_d": 0.7193760490752092,
+    "spice": 0.17158958050346582,
+    "spider": 0.44548281478933754,
+    "sbert_sim": 0.6131383305749832,
     "fer": 0.0041025641025641026,
-    "fense": 0.6119599122886474,
-    "meteor": 0.23153646223788885
+    "fense": 0.6107953991576648,
+    "meteor": 0.23111598697250332
   }
 }

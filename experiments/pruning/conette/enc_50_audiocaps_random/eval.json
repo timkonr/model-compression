@@ -7,7 +7,7 @@
   "unquantized_parameters": 36254327,
   "flops": 34569596185,
   "device": "cuda:0",
-  "inference_time_in_s": "103.240",
+  "inference_time_in_s": "106.469",
   "pruning_setup": {
     "decoder_pruning_ratio": null,
     "convnext_3072_threshold": null,
@@ -20,9 +20,9 @@
     "cider_d": 0.6237388957209441,
     "spice": 0.16218995802571415,
     "spider": 0.3929644268733291,
-    "sbert_sim": 0.5784777973401241,
+    "sbert_sim": 0.5784777979514538,
     "fer": 0.0010256410256410256,
-    "fense": 0.5779348042347493,
+    "fense": 0.577934804846079,
     "meteor": 0.2181261381482323
   }
 }

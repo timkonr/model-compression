@@ -3,11 +3,11 @@
   "compression_technique": "pruning",
   "dataset": "audiocaps",
   "seed": 42,
-  "model_size_mb": 179.923751,
+  "model_size_mb": 179.923815,
   "unquantized_parameters": 43535656,
-  "flops": 44815350041,
+  "flops": 45251638451,
   "device": "cuda:0",
-  "inference_time_in_s": "104.042",
+  "inference_time_in_s": "110.743",
   "pruning_setup": {
     "decoder_pruning_ratio": 0.9,
     "convnext_3072_threshold": null,
@@ -17,12 +17,12 @@
     "num_calibration_batches": 128
   },
   "evaluation_results": {
-    "cider_d": 0.6802713391693117,
-    "spice": 0.1374786109806152,
-    "spider": 0.40887497507496345,
-    "sbert_sim": 0.57994424729011,
-    "fer": 0.057435897435897436,
-    "fense": 0.5503295303155215,
-    "meteor": 0.20940857638288937
+    "cider_d": 0.7001237138396067,
+    "spice": 0.1451885376876589,
+    "spider": 0.4226561257636328,
+    "sbert_sim": 0.5923566733720975,
+    "fer": 0.05128205128205128,
+    "fense": 0.5662327246925769,
+    "meteor": 0.21693285574811877
   }
 }
