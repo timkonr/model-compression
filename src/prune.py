@@ -137,8 +137,7 @@ def allocate_layerwise_keep_indices(
     under-pruned even at high global ratios.
 
     Solution — cost-weighted value/cost selection:
-      value(neuron) = importance score normalized to [0,1] within its layer
-                      (per-layer normalization removes cross-layer magnitude bias)
+      value(neuron) = raw importance score (preserves cross-layer scale information)
       cost(neuron)  = neuron_cost (params removed if this neuron is pruned)
 
     Neurons are sorted ascending by value/cost. We greedily remove the
@@ -168,10 +167,9 @@ def allocate_layerwise_keep_indices(
     all_neurons = []
     for li, info in enumerate(layer_infos):
         scores = info["scores"]
-        norm_scores = scores / (scores.max() + 1e-12)  # [0, 1] within this layer
         cost = info["neuron_cost"]
         for ni in range(len(scores)):
-            all_neurons.append((norm_scores[ni].item() / cost, li, ni))
+            all_neurons.append((scores[ni].item() / cost, li, ni))
 
     # Sort ascending: least value-per-cost first → prune these
     all_neurons.sort(key=lambda x: x[0])
@@ -316,7 +314,7 @@ class ActivationCollector:
           - (batch, seq, hidden_dim)
           - or any (..., hidden_dim)
 
-        tensor is the post-GELU input to the DOWN-projection (linear2 / pwconv2).
+        tensor is the post-GELU for the encoder and the post-ReLU for the decoder input to the DOWN-projection (linear2 / pwconv2).
         """
         x = tensor.detach().abs().float()
         mask = self.sequence_mask
@@ -427,9 +425,7 @@ def collect_conette_encoder_activation_scores(
 
     result = {}
     for name, (collector, down_proj) in collectors.items():
-        act_norms = collector.result()  # (hidden_dim,)
-        w2_norms = down_proj.weight.float().norm(p=2, dim=0)  # (hidden_dim,)
-        result[name] = act_norms * w2_norms
+        result[name] = collector.result()
     return result
 
 
@@ -505,10 +501,8 @@ def collect_conette_decoder_activation_scores(
         handle.remove()
 
     result = {}
-    for name, (collector, down_proj) in collectors.items():
-        act_norms = collector.result()  # (hidden_dim,)
-        w2_norms = down_proj.weight.float().norm(p=2, dim=0)  # (hidden_dim,)
-        result[name] = act_norms * w2_norms
+    for name, (collector, _) in collectors.items():
+        result[name] = collector.result()
     return result
 
 
@@ -908,10 +902,8 @@ def collect_clapcap_activation_scores(
     print(f"[CLAPCAP calibration] done — {n_collected} samples collected")
 
     result = {}
-    for key, (collector, down_proj) in collectors.items():
-        act_norms = collector.result()  # (hidden_dim,)
-        w2_norms = down_proj.weight.float().norm(p=2, dim=0)  # (hidden_dim,)
-        result[key] = act_norms * w2_norms
+    for key, (collector, _) in collectors.items():
+        result[key] = collector.result()
     return result
 
 
