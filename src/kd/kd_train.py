@@ -301,7 +301,9 @@ def train(
                 "decoder_pruned": decoder_pruned,
                 "hidden_dims": student_hidden_dims,
                 "pruning": {
-                    "global_pruning_ratio": getattr(config, "global_pruning_ratio", None),
+                    "global_pruning_ratio": getattr(
+                        config, "global_pruning_ratio", None
+                    ),
                     "decoder_pruning_ratio": config.decoder_pruning_ratio,
                     "convnext_3072_threshold": config.convnext_3072_threshold,
                     "convnext_1536_threshold": config.convnext_1536_threshold,
@@ -451,6 +453,7 @@ def main():
 
     config.load_from_yaml(args.config)
     config.set_seed(config.seed)
+    save_dir = os.path.dirname(os.path.abspath(args.config))
 
     baseline_path = config.model_folder + "baseline/"
     print(f"Loading baseline from {baseline_path}")
@@ -480,7 +483,7 @@ def main():
         lr=config.lr,
         lr_encoder=config.lr_encoder,
         patience=config.patience,
-        save_dir=config.kd_save_dir,
+        save_dir=save_dir,
         mode=config.kd_mode,
         train_components=getattr(config, "kd_train_components", "all"),
         student_hidden_dims=student_hidden_dims,

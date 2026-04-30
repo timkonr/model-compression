@@ -26,8 +26,7 @@ kd:
   batch_size: 4
   grad_accum_steps: 4
   patience: 10
-  save_dir: checkpoints/kd_decoder_pruned_clotho_pure_kd_dec
-  model_path: checkpoints/kd_decoder_pruned_clotho_pure_kd_dec/best
+  model_path: experiments/kd/conette/dec_pruned_clotho_pure_kd_dec/best
 
 metrics: [spider, fense, meteor]
 inference: true
