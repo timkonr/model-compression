@@ -25,10 +25,10 @@ kd:
   lr_encoder: 1.0e-7
   weight_decay: 2.0
   grad_clip_norm: 10.0
-  num_epochs: 25
+  num_epochs: 15
   batch_size: 4
   grad_accum_steps: 4
-  patience: 10
+  patience: 5
   model_path: experiments/kd/conette/dec_pruned_clotho_pure_kd_orig/best
 
 metrics: [spider, fense, meteor]
