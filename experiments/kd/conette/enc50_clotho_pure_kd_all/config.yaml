@@ -22,13 +22,13 @@ kd:
   train_components: all
   alpha: 0.0
   lr: 1.0e-5
-  lr_encoder: 1.0e-6
-  weight_decay: 2.0
+  lr_encoder: 1.0e-5
+  weight_decay: 1.0e-5
   grad_clip_norm: 10.0
-  num_epochs: 25
+  num_epochs: 15
   batch_size: 4
   grad_accum_steps: 4
-  patience: 10
+  patience: 5
   model_path: experiments/kd/conette/enc50_clotho_pure_kd_all/best
 
 metrics: [spider, fense, meteor]
