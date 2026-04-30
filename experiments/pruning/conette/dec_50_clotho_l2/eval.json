@@ -3,13 +3,13 @@
   "compression_technique": "pruning",
   "dataset": "clotho",
   "seed": 42,
-  "model_size_mb": 190.009191,
+  "model_size_mb": 190.009383,
   "unquantized_parameters": 46057051,
-  "flops": 93086852505,
+  "flops": 92086987776,
   "device": "cuda:0",
-  "inference_time_in_s": "162.662",
+  "inference_time_in_s": "166.405",
   "pruning_setup": {
-    "decoder_threshold": 0.5,
+    "decoder_pruning_ratio": 0.5,
     "convnext_3072_threshold": null,
     "convnext_1536_threshold": null,
     "global_pruning_ratio": null,
@@ -17,12 +17,12 @@
     "num_calibration_batches": 0
   },
   "evaluation_results": {
-    "cider_d": 0.4526144804022109,
-    "spice": 0.13306631357252657,
-    "spider": 0.29284039698736875,
-    "sbert_sim": 0.49768558386624145,
-    "fer": 0.0009569377990430622,
-    "fense": 0.4971000069714905,
-    "meteor": 0.18549441985975534
+    "cider_d": 0.48601276325329973,
+    "spice": 0.13481708358267627,
+    "spider": 0.310414923417988,
+    "sbert_sim": 0.5091856957800935,
+    "fer": 0.0019138755980861245,
+    "fense": 0.508043039267856,
+    "meteor": 0.1875103020054875
   }
 }
