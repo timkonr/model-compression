@@ -1,10 +1,13 @@
-# Ablation: pure KD loss (Minitron BP #5), encoder + decoder training
-# Primary Minitron-aligned configuration: teacher signal guides full model recovery.
-# Run with: mc-train-kd --config experiments/kd/kd_global50_conette_clotho_pure_kd_all.yaml
+# Encoder 50% pruning (global) + pure KD recovery, encoder + decoder training
+# Batch-size-scaled CoNeTTE hyperparameters: lr=1e-5, weight_decay=2.0, grad_clip=10
+# Training:    mc-train-kd --config experiments/kd/conette/enc50_clotho_pure_kd_all/config.yaml
+# Evaluation:  mc-run      --config experiments/kd/conette/enc50_clotho_pure_kd_all/config.yaml
 
 model: conette
 dataset: clotho
 seed: 42
+
+technique: kd
 
 pruning:
   score_mode: wanda
@@ -18,13 +21,19 @@ kd:
   mode: pure_kd
   train_components: all
   alpha: 0.0
-  lr: 1.0e-6
-  lr_encoder: 1.0e-7
+  lr: 1.0e-5
+  lr_encoder: 1.0e-6
+  weight_decay: 2.0
+  grad_clip_norm: 10.0
   num_epochs: 25
   batch_size: 4
   grad_accum_steps: 4
   patience: 10
-  save_dir: checkpoints/kd_global50_conette_clotho_pure_kd_all
+  model_path: experiments/kd/conette/enc50_clotho_pure_kd_all/best
 
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
 data_folder: data/
 model_folder: model/

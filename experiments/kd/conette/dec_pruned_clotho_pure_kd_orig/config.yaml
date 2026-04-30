@@ -1,5 +1,6 @@
 # Decoder-only pruning (50%) + pure KD recovery, decoder-only training
-# Original CoNeTTE hyperparameters: lr=5e-4, weight_decay=2.0, grad_clip=10, cosine per epoch
+# Batch-size-scaled CoNeTTE hyperparameters: lr scaled 5e-4 → 1e-5 (×batch_ratio=16/512),
+# weight_decay=2.0 and grad_clip=10 from original.
 # Training:    mc-train-kd --config experiments/kd/conette/dec_pruned_clotho_pure_kd_orig/config.yaml
 # Evaluation:  mc-run      --config experiments/kd/conette/dec_pruned_clotho_pure_kd_orig/config.yaml
 
@@ -21,7 +22,7 @@ kd:
   mode: pure_kd
   train_components: decoder
   alpha: 0.0
-  lr: 5.0e-4
+  lr: 1.0e-5
   lr_encoder: 1.0e-7
   weight_decay: 2.0
   grad_clip_norm: 10.0
