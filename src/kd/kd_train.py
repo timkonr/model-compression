@@ -274,10 +274,12 @@ def train(
             f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e}"
         )
 
-    optimizer = torch.optim.AdamW(opt_groups, weight_decay=1e-5)
-    total_steps = num_epochs * len(train_loader)
+    weight_decay = getattr(config, "weight_decay", 1e-5)
+    grad_clip_norm = getattr(config, "grad_clip_norm", 1.0)
+    optimizer = torch.optim.AdamW(opt_groups, weight_decay=weight_decay)
+    # Cosine annealing per epoch (matching CoNeTTE original): lr decays from lr₀ to 0 over num_epochs
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=total_steps, eta_min=lr / 100
+        optimizer, T_max=num_epochs, eta_min=0
     )
 
     best_val_metric = math.inf
@@ -342,10 +344,9 @@ def train(
             # Gradient accumulation
             (loss / grad_accum_steps).backward()
             if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(train_loader):
-                torch.nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(student.parameters(), max_norm=grad_clip_norm)
                 optimizer.step()
                 optimizer.zero_grad()
-                scheduler.step()
 
             epoch_loss += loss.item()
             epoch_ce += loss_ce.item()
@@ -431,6 +432,8 @@ def train(
                 log_f,
             )
             log_f.write("\n")
+
+        scheduler.step()  # cosine annealing per epoch (matching CoNeTTE original)
 
         if epochs_no_improve >= patience:
             print("Early stopping.")
