@@ -61,7 +61,7 @@ kd_mode = "pure_kd"  # pure_kd (Minitron BP #5) | hybrid (Hinton: α·CE + (1-α
 kd_alpha = 0.5  # hybrid only: weight on CE loss (0=pure KD, 1=pure CE)
 kd_train_components = "all"  # encoder | all (encoder + decoder + projection)
 kd_save_dir = "checkpoints/kd"
-weight_decay = 1e-5
+weight_decay = 1.0e-5
 grad_clip_norm = 1.0
 
 ## reproducibility
