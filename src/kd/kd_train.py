@@ -61,8 +61,9 @@ def kd_loss(student_logits, teacher_logits, targets, pad_idx: int):
 
     return F.kl_div(
         F.log_softmax(s, dim=-1),
-        F.softmax(t, dim=-1),
+        F.log_softmax(t, dim=-1),
         reduction="batchmean",
+        log_target=True,
     )
 
 
