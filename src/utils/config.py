@@ -116,12 +116,12 @@ def load_from_yaml(path: str) -> None:
     if "metrics" in cfg:
         g["metrics"] = tuple(cfg["metrics"])
 
-    # technique: none | quantization | pruning | kd | pruning+quantization
+    # technique: none | quantization | pruning | kd | pruning+quantization | kd+quantization
     technique = cfg.get("technique", "none")
     g["baseline"] = technique == "none"
     g["quantization"] = "quantization" in technique
     g["pruning"] = "pruning" in technique
-    g["kd"] = technique == "kd"
+    g["kd"] = "kd" in technique
 
     # Pruning options
     pruning_cfg = cfg.get("pruning", {}) or {}

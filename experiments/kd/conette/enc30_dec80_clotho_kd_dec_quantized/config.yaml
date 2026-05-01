@@ -1,0 +1,27 @@
+# Encoder 30% + Decoder 80% pruned + KD recovery (enc30_dec80_clotho_pure_kd_dec) + INT8 quantization
+# Loads the best checkpoint from enc30_dec80_clotho_pure_kd_dec, then quantizes.
+# Evaluation:  mc-run --config experiments/kd/conette/enc30_dec80_clotho_kd_dec_quantized/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: kd+quantization
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.3
+  decoder_pruning_ratio: 0.8
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  model_path: experiments/kd/conette/enc30_dec80_clotho_pure_kd_dec/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

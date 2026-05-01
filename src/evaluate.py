@@ -34,6 +34,8 @@ def parse_args():
 
 
 def _technique_name():
+    if config.kd and config.quantization:
+        return "kd+quantization"
     if config.pruning and config.quantization:
         return "pruning+quantization"
     if config.pruning:
