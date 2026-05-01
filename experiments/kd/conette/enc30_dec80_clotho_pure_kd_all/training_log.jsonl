@@ -1,0 +1,1 @@
+{"epoch": 0, "train_loss": 0.526854, "train_ce": 4.756406, "train_kd": 0.526854, "val_loss": 0.273458, "is_best": true, "lr": [1e-07, 1e-05]}
