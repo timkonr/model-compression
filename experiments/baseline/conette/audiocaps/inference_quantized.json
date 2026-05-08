@@ -7,7 +7,7 @@
   "unquantized_parameters": 49208923,
   "flops": null,
   "device": "cuda:0",
-  "inference_time_in_s": "141.001",
+  "inference_time_in_s": "125.132",
   "predictions": [
     "an engine is running and a man is speaking",
     "an explosion occurs followed by a loud whooshing sound",

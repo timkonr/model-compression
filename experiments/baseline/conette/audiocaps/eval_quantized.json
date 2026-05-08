@@ -7,7 +7,7 @@
   "unquantized_parameters": 49208923,
   "flops": null,
   "device": "cuda:0",
-  "inference_time_in_s": "141.001",
+  "inference_time_in_s": "125.132",
   "evaluation_results": {
     "cider_d": 0.7277807324404804,
     "spice": 0.17152491377323487,
