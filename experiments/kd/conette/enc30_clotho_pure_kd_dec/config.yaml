@@ -1,0 +1,40 @@
+# Encoder 30% pruning + pure KD recovery, decoder+projection only
+# Encoder frozen — downstream adaptation hypothesis: pruned encoder as fixed feature extractor.
+# Compare against enc30_clotho_pure_kd_all to isolate encoder training contribution.
+# Training:    mc-train-kd --config experiments/kd/conette/enc30_clotho_pure_kd_dec/config.yaml
+# Evaluation:  mc-run      --config experiments/kd/conette/enc30_clotho_pure_kd_dec/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: kd
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.3
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: decoder
+  alpha: 0.0
+  lr: 1.0e-5
+  lr_encoder: 1.0e-7
+  weight_decay: 1.0e-2
+  grad_clip_norm: 10.0
+  num_epochs: 15
+  batch_size: 4
+  grad_accum_steps: 4
+  patience: 5
+  model_path: experiments/kd/conette/enc30_clotho_pure_kd_dec/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
