@@ -12,3 +12,4 @@ torchvision==0.21.0+cu126
 torchaudio==2.6.0+cu126
 torch-pruning==1.5.1
 yt-dlp~=2025.2.19
+wandb~=0.19
