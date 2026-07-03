@@ -38,10 +38,10 @@ def load_model(
     # model.to("cpu")
     if verbose:
         print(
-            f"Original model size on disk: {get_model_size(model if config.baseline_model == "conette" else model.clapcap):.2f} MB"
+            f"Original model size on disk: {get_model_size(model if config.baseline_model == 'conette' else model.clapcap):.2f} MB"
         )
         print(
-            f"Original model params: {get_model_params(model if config.baseline_model == "conette" else model.clapcap)}"
+            f"Original model params: {get_model_params(model if config.baseline_model == 'conette' else model.clapcap)}"
         )
     if kd:
         # KD checkpoint was saved from a pruned model, so its state dict has different
@@ -145,10 +145,10 @@ def load_model(
         )
         if new_model_type != "original":
             print(
-                f"{new_model_type} model size on disk: {get_model_size(model if config.baseline_model == "conette" else model.clapcap):.2f} MB"
+                f"{new_model_type} model size on disk: {get_model_size(model if config.baseline_model == 'conette' else model.clapcap):.2f} MB"
             )
             print(
-                f"{new_model_type} unquantized model params: {get_model_params(model if config.baseline_model == "conette" else model.clapcap)}"
+                f"{new_model_type} unquantized model params: {get_model_params(model if config.baseline_model == 'conette' else model.clapcap)}"
             )
     return model
 
