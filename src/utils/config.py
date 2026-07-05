@@ -79,6 +79,14 @@ weight_decay = 1.0e-5
 betas = (0.9, 0.999)
 eps = 1e-8
 grad_clip_norm = 1.0
+## experiment tracking (W&B) + resume
+use_wandb = True  # log training to Weights & Biases (needs `wandb login` on the pod)
+wandb_project = "conette-kd"  # W&B project name
+wandb_entity = None  # W&B team/entity; None = default account
+# The per-epoch resume checkpoint (last_checkpoint.pt, full state incl. RNG + early-stop)
+# is written next to the run's config on the network volume (/workspace/...) so a fresh
+# pod container recovers it. Set False only for throwaway local runs.
+save_resume_checkpoint = True
 
 ## reproducibility
 seed = 42
@@ -119,6 +127,16 @@ def load_from_yaml(path: str) -> None:
 
     # Pipeline control
     for key in ("inference", "evaluation", "save_inference_results"):
+        if key in cfg:
+            g[key] = cfg[key]
+
+    # Experiment tracking + resume
+    for key in (
+        "use_wandb",
+        "wandb_project",
+        "wandb_entity",
+        "save_resume_checkpoint",
+    ):
         if key in cfg:
             g[key] = cfg[key]
 

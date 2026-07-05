@@ -18,7 +18,9 @@ import argparse
 import json
 import math
 import copy
+import random
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from aac_datasets import AudioCaps, Clotho
@@ -30,6 +32,8 @@ from torch.utils.data import DataLoader
 from finetune import prepare_batch
 from prune import get_conette_hidden_dims, prune_conette
 from utils import config
+
+RESUME_CKPT_NAME = "last_checkpoint.pt"
 
 # ---------------------------------------------------------------------------
 # KD-specific loss
@@ -190,6 +194,42 @@ def run_fense_val(student, val_loader, dataset_name):
     return corpus_scores["fense"].item()
 
 
+# ---------------------------------------------------------------------------
+# Resume: full-state checkpoint (model, optimizer, scheduler, RNG, early-stop)
+# ---------------------------------------------------------------------------
+
+
+def _gather_rng_state():
+    """Snapshot every RNG the training loop draws from, so a resumed run continues
+    the same random stream (data shuffling, dropout) instead of diverging."""
+    return {
+        "python": random.getstate(),
+        "numpy": np.random.get_state(),
+        "torch": torch.get_rng_state(),
+        "cuda": (
+            torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+        ),
+    }
+
+
+def _restore_rng_state(state):
+    if state is None:
+        return
+    random.setstate(state["python"])
+    np.random.set_state(state["numpy"])
+    torch.set_rng_state(state["torch"])
+    if state.get("cuda") is not None and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(state["cuda"])
+
+
+def _save_resume_checkpoint(path, **payload):
+    """Atomically write the resume checkpoint (tmp + os.replace) so a crash mid-write
+    never corrupts the file a later resume depends on."""
+    tmp = path + ".tmp"
+    torch.save(payload, tmp)
+    os.replace(tmp, path)
+
+
 def train(
     teacher,
     student,
@@ -321,44 +361,83 @@ def train(
 
     best_val_metric = math.inf
     epochs_no_improve = 0
+    start_epoch = 0
     os.makedirs(save_dir, exist_ok=True)
 
+    run_config = {
+        "mode": mode,
+        "train_components": train_components,
+        "dataset": dataset_name,
+        "num_epochs": num_epochs,
+        "batch_size": batch_size,
+        "grad_accum_steps": grad_accum_steps,
+        "lr": lr,
+        "lr_encoder": lr_encoder,
+        "patience": patience,
+        "weight_decay": weight_decay,
+        "betas": betas,
+        "eps": eps,
+        "warmup_epochs": warmup_epochs,
+        "alpha": getattr(config, "kd_alpha", None),
+        "encoder_pruned": encoder_pruned,
+        "decoder_pruned": decoder_pruned,
+        "hidden_dims": student_hidden_dims,
+        "pruning": {
+            "global_pruning_ratio": getattr(config, "global_pruning_ratio", None),
+            "decoder_pruning_ratio": config.decoder_pruning_ratio,
+            "convnext_3072_threshold": config.convnext_3072_threshold,
+            "convnext_1536_threshold": config.convnext_1536_threshold,
+            "score_mode": config.pruning_score_mode,
+            "num_calibration_batches": config.num_calibration_batches,
+        },
+    }
     with open(os.path.join(save_dir, "run_config.json"), "w") as f:
-        json.dump(
-            {
-                "mode": mode,
-                "train_components": train_components,
-                "dataset": dataset_name,
-                "num_epochs": num_epochs,
-                "batch_size": batch_size,
-                "grad_accum_steps": grad_accum_steps,
-                "lr": lr,
-                "lr_encoder": lr_encoder,
-                "patience": patience,
-                "weight_decay": weight_decay,
-                "betas": betas,
-                "eps": eps,
-                "warmup_epochs": warmup_epochs,
-                "alpha": getattr(config, "kd_alpha", None),
-                "encoder_pruned": encoder_pruned,
-                "decoder_pruned": decoder_pruned,
-                "hidden_dims": student_hidden_dims,
-                "pruning": {
-                    "global_pruning_ratio": getattr(
-                        config, "global_pruning_ratio", None
-                    ),
-                    "decoder_pruning_ratio": config.decoder_pruning_ratio,
-                    "convnext_3072_threshold": config.convnext_3072_threshold,
-                    "convnext_1536_threshold": config.convnext_1536_threshold,
-                    "score_mode": config.pruning_score_mode,
-                    "num_calibration_batches": config.num_calibration_batches,
-                },
-            },
-            f,
-            indent=2,
-        )
+        json.dump(run_config, f, indent=2)
 
-    for epoch in range(num_epochs):
+    # Resume: reload full state (model, optimizer, scheduler, RNG, early-stop counters)
+    # from the network-volume checkpoint if a previous run was interrupted.
+    device = next(student.parameters()).device
+    wandb_run_id = None
+    ckpt_path = os.path.join(save_dir, RESUME_CKPT_NAME)
+    if os.path.exists(ckpt_path):
+        ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+        student.load_state_dict(ckpt["model"])
+        optimizer.load_state_dict(ckpt["optimizer"])
+        scheduler.load_state_dict(ckpt["scheduler"])
+        best_val_metric = ckpt["best_val_metric"]
+        epochs_no_improve = ckpt["epochs_no_improve"]
+        start_epoch = ckpt["epoch"] + 1
+        wandb_run_id = ckpt.get("wandb_run_id")
+        _restore_rng_state(ckpt.get("rng"))
+        print(
+            f"[RESUME] loaded {ckpt_path} -> continuing at epoch {start_epoch} "
+            f"(best_val={best_val_metric:.4f}, no_improve={epochs_no_improve})"
+        )
+    else:
+        print("[fresh] no resume checkpoint -> starting at epoch 0")
+
+    # W&B experiment tracking (resumes the same run via stored id after an interruption).
+    wb = None
+    if getattr(config, "use_wandb", False):
+        try:
+            import wandb
+
+            wb = wandb.init(
+                project=getattr(config, "wandb_project", "conette-kd"),
+                entity=getattr(config, "wandb_entity", None),
+                name=os.path.basename(save_dir),
+                id=wandb_run_id,
+                resume="allow",
+                config=run_config,
+            )
+            wandb_run_id = wb.id
+        except Exception as e:
+            print(f"[wandb] disabled (init failed: {e})")
+            wb = None
+
+    save_resume = getattr(config, "save_resume_checkpoint", True)
+
+    for epoch in range(start_epoch, num_epochs):
         student.train()
         epoch_loss = epoch_ce = epoch_kd = 0.0
         n_steps = 0
@@ -385,7 +464,9 @@ def train(
             # Gradient accumulation
             (loss / grad_accum_steps).backward()
             if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(train_loader):
-                torch.nn.utils.clip_grad_norm_(student.parameters(), max_norm=grad_clip_norm)
+                torch.nn.utils.clip_grad_norm_(
+                    student.parameters(), max_norm=grad_clip_norm
+                )
                 optimizer.step()
                 optimizer.zero_grad()
 
@@ -459,26 +540,59 @@ def train(
             epochs_no_improve += 1
             print(f"  No improvement ({epochs_no_improve}/{patience})")
 
+        epoch_lr = scheduler.get_last_lr()
+        log_row = {
+            "epoch": epoch,
+            "train_loss": round(avg_loss, 6),
+            "train_ce": round(epoch_ce / n_steps, 6),
+            "train_kd": round(epoch_kd / n_steps, 6),
+            "val_loss": round(val_loss, 6) if val_loss is not None else None,
+            "is_best": is_best,
+            "lr": epoch_lr,
+        }
         with open(os.path.join(save_dir, "training_log.jsonl"), "a") as log_f:
-            json.dump(
-                {
-                    "epoch": epoch,
-                    "train_loss": round(avg_loss, 6),
-                    "train_ce": round(epoch_ce / n_steps, 6),
-                    "train_kd": round(epoch_kd / n_steps, 6),
-                    "val_loss": round(val_loss, 6) if val_loss is not None else None,
-                    "is_best": is_best,
-                    "lr": scheduler.get_last_lr(),
-                },
-                log_f,
-            )
+            json.dump(log_row, log_f)
             log_f.write("\n")
 
+        if wb is not None:
+            wb_row = {
+                "train_loss": avg_loss,
+                "train_ce": epoch_ce / n_steps,
+                "train_kd": epoch_kd / n_steps,
+                "is_best": is_best,
+                "best_val_metric": best_val_metric,
+            }
+            if val_loss is not None:
+                wb_row["val_loss"] = val_loss
+            for i, lr_val in enumerate(epoch_lr):
+                wb_row[f"lr_g{i}"] = lr_val
+            wb.log(wb_row, step=epoch)
+
         scheduler.step()  # cosine annealing per epoch (matching CoNeTTE original)
+
+        # Full-state resume checkpoint AFTER scheduler.step(): the scheduler now holds the
+        # state for epoch+1, and start_epoch on resume is epoch+1 — so we must NOT step
+        # again before the resumed loop. Written last so it only advances on a complete epoch.
+        if save_resume:
+            _save_resume_checkpoint(
+                ckpt_path,
+                epoch=epoch,
+                model=student.state_dict(),
+                optimizer=optimizer.state_dict(),
+                scheduler=scheduler.state_dict(),
+                best_val_metric=best_val_metric,
+                epochs_no_improve=epochs_no_improve,
+                rng=_gather_rng_state(),
+                wandb_run_id=wandb_run_id,
+                student_hidden_dims=student_hidden_dims,
+            )
 
         if epochs_no_improve >= patience:
             print("Early stopping.")
             break
+
+    if wb is not None:
+        wb.finish()
 
     print(f"Done. Best model at {save_dir}/best/")
 
@@ -504,7 +618,16 @@ def main():
     baseline = CoNeTTEModel.from_pretrained(
         baseline_path, config=CoNeTTEConfig.from_pretrained(baseline_path)
     )
-    teacher = baseline
+
+    teacher_ckpt = getattr(config, "teacher_checkpoint", None)
+    if teacher_ckpt:
+        teacher = copy.deepcopy(baseline)
+        state = torch.load(teacher_ckpt, map_location="cpu")
+        teacher.load_state_dict(state)
+        print(f"Loaded corrected teacher from {teacher_ckpt} (Minitron BP #11)")
+    else:
+        teacher = baseline
+
     student = copy.deepcopy(baseline)
     print("Applying pruning to student...")
     # Build calibration loader for wanda activation-aware scoring.
