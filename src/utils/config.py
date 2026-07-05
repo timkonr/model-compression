@@ -21,6 +21,9 @@ evaluation = True
 data_folder = "data/"  # Path to data folder
 model_folder = "model/"  # Path to model folder
 flops_n_samples = 10  # Number of samples to average over for FLOPs measurement
+eval_batch_size = 8  # Batch size for corpus-wide scoring inference (conette only)
+latency_n_samples = 30  # Fixed subset size for the dedicated bs=1 latency benchmark
+latency_n_warmup = 5  # Warm-up iterations discarded before timing the latency benchmark
 
 ## quantization config
 quantization = False  # Inference on quantized model
@@ -146,6 +149,14 @@ def load_from_yaml(path: str) -> None:
     # FLOPs measurement
     if "flops_n_samples" in cfg:
         g["flops_n_samples"] = cfg["flops_n_samples"]
+
+    # Evaluation batch size + latency benchmark
+    if "eval_batch_size" in cfg:
+        g["eval_batch_size"] = cfg["eval_batch_size"]
+    if "latency_n_samples" in cfg:
+        g["latency_n_samples"] = cfg["latency_n_samples"]
+    if "latency_n_warmup" in cfg:
+        g["latency_n_warmup"] = cfg["latency_n_warmup"]
 
     # Quantization options
     quant_cfg = cfg.get("quantization", {})

@@ -89,7 +89,7 @@ def _build_clapcap_audio_paths() -> list[str]:
     return paths
 
 
-def prepare_dataloader(verbose, subset):
+def load_dataset(verbose, subset):
     print(f"loading dataset {config.dataset} {subset}")
 
     if config.dataset == "clotho":
@@ -112,7 +112,12 @@ def prepare_dataloader(verbose, subset):
             except Exception as e:
                 print(f"Exception on index {i}: {str(e)}")
 
-    return DataLoader(ds, batch_size=1, collate_fn=BasicCollate())
+    return ds
+
+
+def prepare_dataloader(verbose, subset, batch_size=1):
+    ds = load_dataset(verbose, subset)
+    return DataLoader(ds, batch_size=batch_size, collate_fn=BasicCollate())
 
 
 def inference(model: torch.nn.Module, data_loader):
@@ -156,10 +161,48 @@ def inference(model: torch.nn.Module, data_loader):
     return predictions, references, inference_time
 
 
+def measure_latency(model, dataset, device, n_samples, n_warmup):
+    """Dedicated bs=1 per-sample latency benchmark, decoupled from `eval_batch_size`.
+
+    Uses a fixed deterministic subset so the number stays comparable across
+    experiments regardless of the batch size used for corpus-wide scoring.
+    """
+    n = min(n_samples, len(dataset))
+    loader = DataLoader(
+        torch.utils.data.Subset(dataset, list(range(n))),
+        batch_size=1,
+        collate_fn=BasicCollate(),
+    )
+    model.eval()
+    is_cuda = device.startswith("cuda")
+    times = []
+    with torch.no_grad():
+        for i, batch in enumerate(loader):
+            if is_cuda:
+                torch.cuda.synchronize()
+            start = perf_counter()
+            model(batch["audio"], batch["sr"], task=config.dataset)
+            if is_cuda:
+                torch.cuda.synchronize()
+            elapsed = perf_counter() - start
+            if i >= n_warmup:
+                times.append(elapsed)
+
+    times = torch.tensor(times)
+    return {
+        "latency_ms_per_sample_mean": (times.mean() * 1000).item(),
+        "latency_ms_per_sample_std": (
+            (times.std(unbiased=False) * 1000).item() if len(times) > 1 else 0.0
+        ),
+    }
+
+
 def perform_inference(verbose):
-    # test_loader: evaluation subset (Clotho="eval", AudioCaps="test") — used for inference
-    test_loader = prepare_dataloader(
-        verbose, subset="test" if config.dataset == "audiocaps" else "eval"
+    # test_ds: evaluation subset (Clotho="eval", AudioCaps="test") — used for inference
+    test_subset = "test" if config.dataset == "audiocaps" else "eval"
+    test_ds = load_dataset(verbose, subset=test_subset)
+    test_loader = DataLoader(
+        test_ds, batch_size=config.eval_batch_size, collate_fn=BasicCollate()
     )
 
     # Calibration data for wanda scoring — must NOT be the evaluation subset.
@@ -200,7 +243,10 @@ def perform_inference(verbose):
         )
         flops = None
     elif config.baseline_model == "conette":
-        flops = measure_flops_conette(model, test_loader, task=config.dataset)
+        # bs=1 regardless of eval_batch_size: measure_flops_conette averages "per batch",
+        # which must mean "per sample" for the FLOPs metric to stay comparable across runs.
+        flops_loader = DataLoader(test_ds, batch_size=1, collate_fn=BasicCollate())
+        flops = measure_flops_conette(model, flops_loader, task=config.dataset)
     else:
         csv_path = (
             f"{config.data_folder}/CLOTHO_v2.1/clotho_csv_files/clotho_captions_evaluation.csv"
@@ -224,6 +270,20 @@ def perform_inference(verbose):
     print(f"starting inference on device: {device}")
     predictions, references, inference_time = inference(model, data_loader=test_loader)
 
+    latency_stats = {"latency_ms_per_sample_mean": None, "latency_ms_per_sample_std": None}
+    if config.baseline_model == "conette":
+        print(
+            f"measuring latency (bs=1, n={config.latency_n_samples}, "
+            f"warmup={config.latency_n_warmup})..."
+        )
+        latency_stats = measure_latency(
+            model,
+            test_ds,
+            device=device,
+            n_samples=config.latency_n_samples,
+            n_warmup=config.latency_n_warmup,
+        )
+
     metadata = {
         "model": config.baseline_model,
         "compression_technique": technique,
@@ -233,7 +293,9 @@ def perform_inference(verbose):
         "unquantized_parameters": model_params,
         "flops": flops,
         "device": device,
-        "inference_time_in_s": f"{inference_time:.3f}",
+        "eval_batch_size": config.eval_batch_size,
+        "total_inference_time_in_s": f"{inference_time:.3f}",
+        **latency_stats,
         "predictions": predictions,
         "references": references,
     }
