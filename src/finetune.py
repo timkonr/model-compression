@@ -2,7 +2,9 @@ import random
 import torch
 
 
-def select_captions(raw_captions: list) -> list[str]:
+def select_captions(raw_captions: list, deterministic: bool = False) -> list[str]:
+    # deterministic=True always picks the first reference caption. Used for validation
+    # so val_loss reflects model quality only, not which of the 5 captions was sampled.
     selected_captions = []
 
     for captions in raw_captions:
@@ -10,7 +12,7 @@ def select_captions(raw_captions: list) -> list[str]:
             captions = list(captions)
 
         if isinstance(captions, list):
-            caption = random.choice(captions)
+            caption = captions[0] if deterministic else random.choice(captions)
         else:
             caption = captions
 
@@ -63,6 +65,7 @@ def prepare_batch(
     hf_model: torch.nn.Module,
     raw_batch: dict,
     dataset_name: str,
+    deterministic: bool = False,
 ) -> dict:
     # Convert raw audio input to the internal CoNeTTE representation.
     batch = hf_model.preprocessor(raw_batch["audio"], raw_batch["sr"])
@@ -71,7 +74,7 @@ def prepare_batch(
         key: value.to(hf_model.device) if isinstance(value, torch.Tensor) else value
         for key, value in batch.items()
     }
-    captions = select_captions(raw_batch["captions"])
+    captions = select_captions(raw_batch["captions"], deterministic=deterministic)
     caption_ids = encode_captions(
         hf_model.model.tokenizer,
         captions,

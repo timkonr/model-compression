@@ -1,6 +1,6 @@
 # LR sweep (decoder-only target) — Experiment_Redo_TODO.md #2.
 # Representative config: decoder-pruned 50%, train_components=decoder, encoder frozen.
-# Short truncated run (num_epochs=5, patience=3) to compare val_loss trend across the
+# Full-length run (num_epochs=10, no early stopping, warmup=2) to compare val_loss trend across the
 # grid [5e-4, 1e-4, 5e-5, 1e-5] on held-out val — NEVER on test/eval. Winner gets frozen
 # as `lr` for all decoder-only recovery runs across pruning ratios.
 # Run: mc-train-kd --config experiments/kd/sweep/decoder_lr/lr_5e-5/config.yaml
@@ -23,10 +23,11 @@ kd:
   alpha: 0.0
   lr: 5e-5
   lr_encoder: 1.0e-6
-  num_epochs: 5
-  batch_size: 64
-  grad_accum_steps: 8
-  patience: 3
+  num_epochs: 10
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
   save_dir: experiments/kd/sweep/decoder_lr/lr_5e-5
 
 data_folder: data/

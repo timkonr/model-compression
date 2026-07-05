@@ -504,7 +504,11 @@ def train(
             val_loss_sum, n_val = 0.0, 0
             with torch.no_grad():
                 for raw_batch in val_loader:
-                    batch = prepare_batch(student, raw_batch, dataset_name)
+                    # deterministic caption selection: val_loss must be reproducible
+                    # across epochs/configs, not perturbed by random caption sampling.
+                    batch = prepare_batch(
+                        student, raw_batch, dataset_name, deterministic=True
+                    )
                     t_audio_batch = None
                     if mode != "encoder_ce" and encoder_pruned:
                         t_audio_batch = teacher.preprocessor(
