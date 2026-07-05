@@ -1,0 +1,33 @@
+# LR sweep (decoder-only target) — Experiment_Redo_TODO.md #2.
+# Representative config: decoder-pruned 50%, train_components=decoder, encoder frozen.
+# Short truncated run (num_epochs=5, patience=3) to compare val_loss trend across the
+# grid [5e-4, 1e-4, 5e-5, 1e-5] on held-out val — NEVER on test/eval. Winner gets frozen
+# as `lr` for all decoder-only recovery runs across pruning ratios.
+# Run: mc-train-kd --config experiments/kd/sweep/decoder_lr/lr_5e-5/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.5
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: decoder
+  alpha: 0.0
+  lr: 5e-5
+  lr_encoder: 1.0e-6
+  num_epochs: 5
+  batch_size: 64
+  grad_accum_steps: 8
+  patience: 3
+  save_dir: experiments/kd/sweep/decoder_lr/lr_5e-5
+
+data_folder: data/
+model_folder: model/
