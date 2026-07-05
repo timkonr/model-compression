@@ -1,7 +1,7 @@
 # LR sweep (encoder-only target) — Experiment_Redo_TODO.md #2/#3.
-# Representative config: encoder-pruned 50% (global_pruning_ratio), train_components=encoder,
+# Representative config: encoder-pruned 60% (global_pruning_ratio), train_components=encoder,
 # decoder frozen. Full-length run (num_epochs=10, no early stopping, warmup=2) to compare val_loss trend
-# across the grid [1e-7, 5e-7, 1e-6, 5e-6, 1e-5] on held-out val — NEVER on test/eval.
+# across the grid [1e-7, 1e-6, 1e-5] on held-out val — NEVER on test/eval.
 # Lower/wider grid than the decoder sweep: supervisor diagnosed catastrophic forgetting
 # from too-high LR on the AudioSet-pretrained ConvNeXt encoder (Pellegrini et al., 2023)
 # as the cause of earlier encoder-recovery failures. Winner gets frozen as `lr_encoder`
@@ -15,7 +15,7 @@ seed: 42
 pruning:
   score_mode: wanda
   num_calibration_batches: 128
-  global_pruning_ratio: 0.5
+  global_pruning_ratio: 0.6
   decoder_pruning_ratio: null
   convnext_3072_threshold: null
   convnext_1536_threshold: null
