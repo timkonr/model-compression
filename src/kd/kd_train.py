@@ -217,7 +217,8 @@ def _restore_rng_state(state):
         return
     random.setstate(state["python"])
     np.random.set_state(state["numpy"])
-    torch.set_rng_state(state["torch"])
+    torch_state = state["torch"].cpu().to(torch.uint8)
+    torch.set_rng_state(torch_state)
     if state.get("cuda") is not None and torch.cuda.is_available():
         torch.cuda.set_rng_state_all(state["cuda"])
 
