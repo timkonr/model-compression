@@ -131,6 +131,21 @@ def train_step(
 # ---------------------------------------------------------------------------
 
 
+def _wd_groups(params, lr, weight_decay):
+    """Split params into decay/no-decay groups, excluding 1D params (biases, norm
+    weights/scales) from weight decay. Matches CoNeTTE's own optimizer setup
+    (conette/optim/optimizers.py: use_custom_wd), adopted here as the HP anchor.
+    """
+    decay = [p for p in params if p.ndim > 1]
+    no_decay = [p for p in params if p.ndim <= 1]
+    groups = []
+    if decay:
+        groups.append({"params": decay, "lr": lr, "weight_decay": weight_decay})
+    if no_decay:
+        groups.append({"params": no_decay, "lr": lr, "weight_decay": 0.0})
+    return groups
+
+
 def build_dataloader(dataset_name, subset, batch_size):
     if dataset_name == "audiocaps":
         ds = AudioCaps(config.data_folder, subset=subset, audio_format="wav", sr=22050)
@@ -248,15 +263,18 @@ def train(
         student.model.projection.parameters()
     )
 
+    weight_decay = getattr(config, "weight_decay", 1.0e-5)
+    grad_clip_norm = getattr(config, "grad_clip_norm", 1.0)
+
     opt_groups = []
     if train_components in ("encoder", "all"):
         for p in encoder_params:
             p.requires_grad_(True)
-        opt_groups.append({"params": encoder_params, "lr": lr_encoder})
+        opt_groups += _wd_groups(encoder_params, lr_encoder, weight_decay)
     if train_components in ("decoder", "all"):
         for p in decoder_params:
             p.requires_grad_(True)
-        opt_groups.append({"params": decoder_params, "lr": lr})
+        opt_groups += _wd_groups(decoder_params, lr, weight_decay)
 
     trainable = sum(p.numel() for p in student.parameters() if p.requires_grad)
     total = sum(p.numel() for p in student.parameters())
@@ -275,13 +293,31 @@ def train(
             f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e}"
         )
 
-    weight_decay = getattr(config, "weight_decay", 1e-5)
-    grad_clip_norm = getattr(config, "grad_clip_norm", 1.0)
-    optimizer = torch.optim.AdamW(opt_groups, weight_decay=weight_decay)
-    # Cosine annealing per epoch (matching CoNeTTE original): lr decays from lr₀ to 0 over num_epochs
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=num_epochs, eta_min=0
-    )
+    betas = tuple(getattr(config, "betas", (0.9, 0.999)))
+    eps = getattr(config, "eps", 1e-8)
+    # weight_decay is set per-group above (_wd_groups) — 0.0 on 1D params, else the
+    # configured value — so it is NOT passed globally here.
+    optimizer = torch.optim.AdamW(opt_groups, betas=betas, eps=eps)
+
+    # Linear warmup (fixed across all configs/targets, so the LR sweep isolates LR
+    # only) followed by cosine decay per epoch (matching CoNeTTE original schedule shape).
+    warmup_epochs = min(getattr(config, "warmup_epochs", 1), max(num_epochs - 1, 0))
+    if warmup_epochs > 0:
+        warmup_sched = torch.optim.lr_scheduler.LinearLR(
+            optimizer, start_factor=1e-3, end_factor=1.0, total_iters=warmup_epochs
+        )
+        cosine_sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=num_epochs - warmup_epochs, eta_min=0
+        )
+        scheduler = torch.optim.lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_sched, cosine_sched],
+            milestones=[warmup_epochs],
+        )
+    else:
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=num_epochs, eta_min=0
+        )
 
     best_val_metric = math.inf
     epochs_no_improve = 0
@@ -299,6 +335,10 @@ def train(
                 "lr": lr,
                 "lr_encoder": lr_encoder,
                 "patience": patience,
+                "weight_decay": weight_decay,
+                "betas": betas,
+                "eps": eps,
+                "warmup_epochs": warmup_epochs,
                 "alpha": getattr(config, "kd_alpha", None),
                 "encoder_pruned": encoder_pruned,
                 "decoder_pruned": decoder_pruned,

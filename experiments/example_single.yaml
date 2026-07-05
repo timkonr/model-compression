@@ -34,3 +34,10 @@ evaluation: true
 save_inference_results: true
 data_folder: data/
 model_folder: model/
+
+# Batch size for corpus-wide scoring inference (conette only; default 1).
+# Per-sample latency is always measured separately at bs=1, so this only
+# affects how fast the scoring pass runs, not the reported latency.
+eval_batch_size: 1
+# latency_n_samples: 30   # fixed subset size for the bs=1 latency benchmark
+# latency_n_warmup: 5     # warm-up iterations discarded before timing

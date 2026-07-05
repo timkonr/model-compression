@@ -52,19 +52,32 @@ kd = False  # Inference on saved kd model
 kd_model = "best_student_model.pth"  # Path to kd model
 patience = 5
 num_epochs = 25
-batch_size = 32
-lr = 1e-5  # decoder + projection learning rate
-grad_accum_steps = (
-    1  # gradient accumulation steps (effective_batch = batch_size * grad_accum_steps)
-)
-lr_encoder = (
-    1e-6  # encoder learning rate (lower to avoid overwriting pretrained features)
-)
+batch_size = 64
+# grad_accum_steps=8 * batch_size=64 = effective batch 512.
+# Per-step batch_size=64 assumes an A40 (48GB VRAM) —
+# still a starting point, not empirically verified. CoNeTTE is small (49M params), so
+# pushing batch_size higher (and grad_accum_steps down correspondingly, product=512)
+# is plausible if 64 leaves VRAM headroom — check on the actual pod before the LR sweep.
+grad_accum_steps = 8
+lr = 1e-5  # decoder + projection learning rate — deliberate deviation from CoNeTTE
+# original (single lr=5e-4, no encoder/decoder split). Frozen per distillation target
+# (decoder-only here) via a small LR grid on held-out val loss, never on test/eval —
+# NOT just kept from earlier experiments.
+lr_encoder = 1e-6  # encoder learning rate. Same grid-on-val-loss procedure as `lr`,
+# but with a lower/wider grid
+warmup_epochs = 1  # linear warmup before cosine decay; fixed across all configs/targets
+# so the LR sweep isolates LR only (see kd_train.py scheduler setup).
 kd_mode = "pure_kd"  # pure_kd (Minitron BP #5) | hybrid (Hinton: α·CE + (1-α)·KD) | encoder_ce (CE only)
 kd_alpha = 0.5  # hybrid only: weight on CE loss (0=pure KD, 1=pure CE)
 kd_train_components = "all"  # encoder | all (encoder + decoder + projection)
 kd_save_dir = "checkpoints/kd"
+# weight_decay/betas/eps: adopted from CoNeTTE's original training config
+# (model/baseline/config.json) as the anchor, per Minitron's "use original HPs" guidance.
+# use_custom_wd (applied in kd_train.py) excludes 1D params (biases, norm weights) from
+# decay, matching CoNeTTE's own optimizer setup (conette/optim/optimizers.py).
 weight_decay = 1.0e-5
+betas = (0.9, 0.999)
+eps = 1e-8
 grad_clip_norm = 1.0
 
 ## reproducibility
@@ -180,6 +193,9 @@ def load_from_yaml(path: str) -> None:
             "train_components",
             "weight_decay",
             "grad_clip_norm",
+            "warmup_epochs",
+            "betas",
+            "eps",
         ):
             config_key = {
                 "model_path": "kd_model",
@@ -189,4 +205,16 @@ def load_from_yaml(path: str) -> None:
                 "train_components": "kd_train_components",
             }.get(key, key)
             if key in kd_cfg:
-                g[config_key] = kd_cfg[key]
+                val = kd_cfg[key]
+                if key in (
+                    "lr",
+                    "lr_encoder",
+                    "alpha",
+                    "weight_decay",
+                    "grad_clip_norm",
+                    "eps",
+                ):
+                    val = float(val)
+                elif key == "betas":
+                    val = tuple(val)
+                g[config_key] = val
