@@ -220,7 +220,8 @@ def _restore_rng_state(state):
     torch_state = state["torch"].cpu().to(torch.uint8)
     torch.set_rng_state(torch_state)
     if state.get("cuda") is not None and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(state["cuda"])
+        cuda_states = [t.cpu().to(torch.uint8) for t in state["cuda"]]
+        torch.cuda.set_rng_state_all(cuda_states)
 
 
 def _save_resume_checkpoint(path, **payload):
