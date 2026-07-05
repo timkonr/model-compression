@@ -1,5 +1,0 @@
-{"epoch": 0, "train_loss": 0.288288, "train_ce": 4.472043, "train_kd": 0.288288, "val_loss": 0.095806, "is_best": true, "lr": [5.0000000000000004e-08, 5.0000000000000004e-08]}
-{"epoch": 1, "train_loss": 0.24968, "train_ce": 4.465393, "train_kd": 0.24968, "val_loss": 0.0823, "is_best": true, "lr": [5e-05, 5e-05]}
-{"epoch": 2, "train_loss": 0.198518, "train_ce": 4.415328, "train_kd": 0.198518, "val_loss": 0.062778, "is_best": true, "lr": [4.267766952966369e-05, 4.267766952966369e-05]}
-{"epoch": 3, "train_loss": 0.177656, "train_ce": 4.384496, "train_kd": 0.177656, "val_loss": 0.053038, "is_best": true, "lr": [2.5e-05, 2.5e-05]}
-{"epoch": 4, "train_loss": 0.165332, "train_ce": 4.361826, "train_kd": 0.165332, "val_loss": 0.049574, "is_best": true, "lr": [7.3223304703363135e-06, 7.3223304703363135e-06]}
