@@ -424,10 +424,19 @@ def train(
         try:
             import wandb
 
+            # Disambiguate runs across sweeps: the leaf dir alone (e.g. "lr_1e-5") is
+            # identical for the decoder_lr and encoder_lr sweeps. Prefix with the parent
+            # dir (the distillation target) so W&B shows e.g. "decoder_lr/lr_1e-5", and
+            # group by that parent so the two sweeps cluster separately in the workspace.
+            sweep_group = os.path.basename(os.path.dirname(save_dir.rstrip("/")))
+            leaf = os.path.basename(save_dir.rstrip("/"))
+            run_name = f"{sweep_group}/{leaf}" if sweep_group else leaf
+
             wb = wandb.init(
                 project=getattr(config, "wandb_project", "conette-kd"),
                 entity=getattr(config, "wandb_entity", None),
-                name=os.path.basename(save_dir),
+                name=run_name,
+                group=sweep_group or None,
                 id=wandb_run_id,
                 resume="allow",
                 config=run_config,
