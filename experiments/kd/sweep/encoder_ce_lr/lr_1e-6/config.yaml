@@ -1,0 +1,42 @@
+# LR sweep (encoder-only target, mode=encoder_ce) — Experiment_Redo_TODO.md #2/#3.
+# Same 60%-encoder-pruned config as the encoder_lr (pure_kd) sweep, but training against
+# real ground-truth captions (CE only, no teacher forward at all — mode=encoder_ce skips
+# the teacher-forward branch entirely) instead of matching the teacher's KD distribution.
+#
+# Why a separate grid from the pure_kd sweep (1e-8/1e-7/1e-6/1e-5): that sweep showed no LR
+# recovering above the epoch-0 value, with damage shrinking smoothly (not vanishing) down to
+# 1e-8 — consistent with an already-near-optimal operating point for the teacher-forced KD
+# loss specifically, not with LR-driven instability (nothing diverged/oscillated at any tested
+# LR). CE against real captions is a different, informative supervised objective, so there's
+# no reason to assume it needs the same ultra-low LR range — using a grid similar in scale to
+# the (successful) decoder_lr sweep instead. Grid: [1e-6, 1e-5, 1e-4, 5e-4].
+# Winner (by held-out val SPIDEr/FENSE, NOT val_loss — different losses aren't comparable)
+# feeds into experiments/kd/ablation/loss/encoder_ce/seed_*/config.yaml.
+# Run: mc-train-kd --config experiments/kd/sweep/encoder_ce_lr/lr_1e-6/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: encoder_ce
+  train_components: encoder
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 1e-6
+  num_epochs: 10
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/sweep/encoder_ce_lr/lr_1e-6
+
+data_folder: data/
+model_folder: model/

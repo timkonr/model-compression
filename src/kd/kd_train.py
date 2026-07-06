@@ -563,6 +563,12 @@ def train(
             val_loss = val_loss_sum / max(n_val, 1)
             monitor = val_loss
             print(f"  val_loss={val_loss:.4f}")
+            
+        fense = None
+        if val_loader is not None:
+            fense = run_fense_val(student, val_loader, dataset_name)
+            print(f"  fense={fense:.4f}")
+
         is_best = monitor < best_val_metric
         if is_best:
             best_val_metric = monitor
@@ -589,6 +595,7 @@ def train(
             "train_ce": round(epoch_ce / n_steps, 6),
             "train_kd": round(epoch_kd / n_steps, 6),
             "val_loss": round(val_loss, 6) if val_loss is not None else None,
+            "fense": round(fense, 6) if fense is not None else None,
             "is_best": is_best,
             "lr": epoch_lr,
         }
@@ -606,6 +613,8 @@ def train(
             }
             if val_loss is not None:
                 wb_row["val_loss"] = val_loss
+            if fense is not None:
+                wb_row["fense"] = fense
             for i, lr_val in enumerate(epoch_lr):
                 wb_row[f"lr_g{i}"] = lr_val
             wb.log(wb_row, step=epoch)
