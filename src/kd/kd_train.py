@@ -150,6 +150,33 @@ def _wd_groups(params, lr, weight_decay):
     return groups
 
 
+def _set_student_train_mode(student, train_components: str) -> None:
+    """Put only the components actually being optimised into train() mode; everything
+    else (frozen decoder/projection, or the encoder's own bn0) stays in eval().
+
+    Freezing via requires_grad_(False) alone does not stop Dropout from firing or
+    BatchNorm running stats from updating — only .eval() does that. A blanket
+    student.train() therefore leaves frozen components noisy/drifting relative to
+    the eval-mode teacher, corrupting the KD target for whatever IS being trained.
+
+    bn0 (ConvNeXt's input BatchNorm2d) is kept in eval() even when the encoder itself
+    is being trained: with batch_size=8 / grad_accum_steps=64, each forward pass would
+    normalise (and update running stats) from only 8 samples, not the effective batch
+    of 512 the gradient itself is accumulated over — gradients accumulate cleanly across
+    micro-steps, but BatchNorm has no such mechanism, so its running stats would be a
+    noisy, high-variance estimate rather than a real 512-sample statistic. eval() uses
+    the stable pretrained running stats instead. Its weight/bias (in encoder_params)
+    still receive gradients as normal; eval() only freezes the running-stat buffers.
+    """
+    student.eval()
+    if train_components in ("encoder", "all"):
+        student.preprocessor.encoder.train()
+        student.preprocessor.encoder.bn0.eval()
+    if train_components in ("decoder", "all"):
+        student.model.decoder.train()
+        student.model.projection.train()
+
+
 def build_dataloader(dataset_name, subset, batch_size):
     if dataset_name == "audiocaps":
         ds = AudioCaps(config.data_folder, subset=subset, audio_format="wav", sr=22050)
@@ -449,7 +476,7 @@ def train(
     save_resume = getattr(config, "save_resume_checkpoint", True)
 
     for epoch in range(start_epoch, num_epochs):
-        student.train()
+        _set_student_train_mode(student, train_components)
         epoch_loss = epoch_ce = epoch_kd = 0.0
         n_steps = 0
 
