@@ -316,12 +316,17 @@ def train(
         # Fallback: train everything if we can't determine what changed
         encoder_pruned = decoder_pruned = True
 
-    if encoder_pruned and not decoder_pruned:
-        print(f"Pruned: encoder only  →  strategy: {mode} (decoder frozen)")
-    elif decoder_pruned and not encoder_pruned:
-        print(f"Pruned: decoder only  →  strategy: {mode} (encoder frozen)")
-    else:
-        print(f"Pruned: encoder + decoder  →  strategy: {mode}")
+    prune_desc = (
+        "encoder only"
+        if encoder_pruned and not decoder_pruned
+        else "decoder only" if decoder_pruned and not encoder_pruned else "encoder + decoder"
+    )
+    frozen_desc = {
+        "encoder": "decoder frozen",
+        "decoder": "encoder frozen",
+        "all": "nothing frozen",
+    }[train_components]
+    print(f"Pruned: {prune_desc}  →  strategy: {mode} ({frozen_desc})")
 
     # Freeze all, then selectively unfreeze only pruned components
     for p in student.parameters():
@@ -478,7 +483,9 @@ def train(
     for epoch in range(start_epoch, num_epochs):
         _set_student_train_mode(student, train_components)
         epoch_loss = epoch_ce = epoch_kd = 0.0
+        epoch_grad_norm = 0.0
         n_steps = 0
+        n_opt_steps = 0
 
         for step, raw_batch in enumerate(train_loader):
             batch = prepare_batch(student, raw_batch, dataset_name)
@@ -502,9 +509,11 @@ def train(
             # Gradient accumulation
             (loss / grad_accum_steps).backward()
             if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(train_loader):
-                torch.nn.utils.clip_grad_norm_(
+                total_norm = torch.nn.utils.clip_grad_norm_(
                     student.parameters(), max_norm=grad_clip_norm
                 )
+                epoch_grad_norm += total_norm.item()
+                n_opt_steps += 1
                 optimizer.step()
                 optimizer.zero_grad()
 
@@ -528,9 +537,11 @@ def train(
                 )
 
         avg_loss = epoch_loss / n_steps
+        avg_grad_norm = epoch_grad_norm / max(n_opt_steps, 1)
         print(
             f"Epoch {epoch}: avg_loss={avg_loss:.4f} "
-            f"avg_ce={epoch_ce/n_steps:.4f} avg_kd={epoch_kd/n_steps:.4f}"
+            f"avg_ce={epoch_ce/n_steps:.4f} avg_kd={epoch_kd/n_steps:.4f} "
+            f"avg_grad_norm={avg_grad_norm:.4e}"
         )
 
         monitor = avg_loss
@@ -596,6 +607,7 @@ def train(
             "train_kd": round(epoch_kd / n_steps, 6),
             "val_loss": round(val_loss, 6) if val_loss is not None else None,
             "fense": round(fense, 6) if fense is not None else None,
+            "grad_norm": round(avg_grad_norm, 6),
             "is_best": is_best,
             "lr": epoch_lr,
         }
@@ -608,6 +620,7 @@ def train(
                 "train_loss": avg_loss,
                 "train_ce": epoch_ce / n_steps,
                 "train_kd": epoch_kd / n_steps,
+                "grad_norm": avg_grad_norm,
                 "is_best": is_best,
                 "best_val_metric": best_val_metric,
             }
