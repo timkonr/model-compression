@@ -20,6 +20,7 @@ save_inference_results = True
 evaluation = True
 data_folder = "data/"  # Path to data folder
 model_folder = "model/"  # Path to model folder
+aac_metrics_cache_path = None
 flops_n_samples = 10  # Number of samples to average over for FLOPs measurement
 eval_batch_size = 8  # Batch size for corpus-wide scoring inference (conette only)
 latency_n_samples = 30  # Fixed subset size for the dedicated bs=1 latency benchmark
@@ -145,6 +146,16 @@ def load_from_yaml(path: str) -> None:
         g["data_folder"] = cfg["data_folder"]
     if "model_folder" in cfg:
         g["model_folder"] = cfg["model_folder"]
+    import os
+
+    cache_path = cfg.get("aac_metrics_cache_path")
+    if cache_path is None and os.path.isdir("/workspace"):
+        cache_path = "/workspace/.cache"
+    if cache_path is not None:
+        g["aac_metrics_cache_path"] = cache_path
+        from aac_metrics import set_default_cache_path
+
+        set_default_cache_path(cache_path)
 
     # Metrics
     if "metrics" in cfg:
