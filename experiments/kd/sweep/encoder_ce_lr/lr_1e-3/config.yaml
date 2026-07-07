@@ -1,0 +1,35 @@
+# LR sweep (encoder-only target, mode=encoder_ce) — Experiment_Redo_TODO.md #2/#3.
+# See lr_1e-6/config.yaml in this same sweep for the full rationale.
+#
+# Grid extension: after the surgical pruned-layer-only fix (train only pwconv1/pwconv2 of
+# the actually-pruned blocks, not the whole encoder), 1e-6/1e-5/1e-4 show a clean, still-
+# rising trend (FENSE gain: +0.15% / +2.0% / +3.9% over the epoch-(-1) baseline) with no
+# sign of a peak yet. This point extends the grid one more decade up to bracket it.
+# Run: mc-train-kd --config experiments/kd/sweep/encoder_ce_lr/lr_1e-3/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: encoder_ce
+  train_components: encoder
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 1e-3
+  num_epochs: 10
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/sweep/encoder_ce_lr/lr_1e-3
+
+data_folder: data/
+model_folder: model/
