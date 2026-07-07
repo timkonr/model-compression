@@ -150,7 +150,9 @@ def _wd_groups(params, lr, weight_decay):
     return groups
 
 
-def _set_student_train_mode(student, train_components: str) -> None:
+def _set_student_train_mode(
+    student, train_components: str, encoder_surgical: bool, decoder_surgical: bool
+) -> None:
     """Put only the components actually being optimised into train() mode; everything
     else (frozen decoder/projection, or the encoder's own bn0) stays in eval().
 
@@ -167,12 +169,20 @@ def _set_student_train_mode(student, train_components: str) -> None:
     noisy, high-variance estimate rather than a real 512-sample statistic. eval() uses
     the stable pretrained running stats instead. Its weight/bias (in encoder_params)
     still receive gradients as normal; eval() only freezes the running-stat buffers.
+
+    encoder_surgical/decoder_surgical: True when only the specifically pruned pwconv/
+    linear pairs are trainable (see train()'s encoder_params/decoder_params). Those are
+    plain nn.Linear — train()/eval() makes no difference to them — so in that case the
+    whole component is left in eval() rather than train()'d: no benefit, and it would
+    needlessly wake up DropPath in the *other*, unpruned blocks of the same component.
+    train() is only needed when the whole component is being trained (the non-surgical
+    fallback), where real Dropout in it is providing actual regularisation.
     """
     student.eval()
-    if train_components in ("encoder", "all"):
+    if train_components in ("encoder", "all") and not encoder_surgical:
         student.preprocessor.encoder.train()
         student.preprocessor.encoder.bn0.eval()
-    if train_components in ("decoder", "all"):
+    if train_components in ("decoder", "all") and not decoder_surgical:
         student.model.decoder.train()
         student.model.projection.train()
 
@@ -219,6 +229,38 @@ def run_fense_val(student, val_loader, dataset_name):
         verbose=0,
     )
     return corpus_scores["fense"].item()
+
+
+@torch.no_grad()
+def _evaluate(student, teacher, val_loader, dataset_name, mode, kd_alpha, encoder_pruned):
+    """One held-out pass: this run's own teacher-forced val_loss (train_step's loss,
+    whatever objective this run actually optimises) plus FENSE (real, generation-based
+    caption quality — comparable across different loss modes, unlike val_loss).
+    Shared by the pre-training baseline eval and the in-loop per-epoch eval so both
+    use identical logic. Returns (val_loss, fense).
+    """
+    student.eval()
+    val_loss_sum, n_val = 0.0, 0
+    for raw_batch in val_loader:
+        # deterministic caption selection: val_loss must be reproducible across
+        # epochs/configs, not perturbed by random caption sampling.
+        batch = prepare_batch(student, raw_batch, dataset_name, deterministic=True)
+        t_audio_batch = None
+        if mode != "encoder_ce" and encoder_pruned:
+            t_audio_batch = teacher.preprocessor(raw_batch["audio"], raw_batch["sr"])
+        loss, _, _, _ = train_step(
+            student.model,
+            teacher.model,
+            batch,
+            teacher_audio_batch=t_audio_batch,
+            mode=mode,
+            alpha=kd_alpha,
+        )
+        val_loss_sum += loss.item()
+        n_val += 1
+    val_loss = val_loss_sum / max(n_val, 1)
+    fense = run_fense_val(student, val_loader, dataset_name)
+    return val_loss, fense
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +315,7 @@ def train(
     mode="pure_kd",
     train_components="all",
     student_hidden_dims=None,
+    pruned_layer_names=None,
 ):
     valid_modes = {"pure_kd", "hybrid", "encoder_ce"}
     if mode not in valid_modes:
@@ -332,10 +375,45 @@ def train(
     for p in student.parameters():
         p.requires_grad_(False)
 
-    encoder_params = list(student.preprocessor.encoder.parameters())
-    decoder_params = list(student.model.decoder.parameters()) + list(
-        student.model.projection.parameters()
+    # Recover only the layers pruning actually touched (pwconv1/pwconv2 pairs for the
+    # encoder, linear1/linear2 pairs for the decoder), not every param in the whole
+    # component. student.preprocessor.encoder.parameters() also includes dwconv, LayerNorm,
+    # the per-block scale_layer, the downsample stem, the final norm, and the (captioning-
+    # unused) head_audioset classifier — none of which pruning modified, so there is nothing
+    # for them to "recover" from. Making them trainable only adds uncontrolled degrees of
+    # freedom Adam can wander through, on top of whatever the actually-pruned neurons need.
+    pruned_layer_names = pruned_layer_names or set()
+    encoder_layer_names = sorted(
+        n for n in pruned_layer_names if n.startswith("preprocessor.encoder")
     )
+    decoder_layer_names = sorted(
+        n for n in pruned_layer_names if n.startswith("model.decoder")
+    )
+
+    encoder_surgical = bool(encoder_layer_names)
+    if encoder_surgical:
+        encoder_params = [
+            p
+            for name in encoder_layer_names
+            for p in student.get_submodule(name).parameters()
+        ]
+    else:
+        # Fallback: pruning info unavailable, or train_components="all"/"decoder" requests
+        # a component that wasn't itself pruned (e.g. training the whole untouched decoder
+        # alongside a pruned encoder) — there is no "pruned subset" to restrict to.
+        encoder_params = list(student.preprocessor.encoder.parameters())
+
+    decoder_surgical = bool(decoder_layer_names)
+    if decoder_surgical:
+        decoder_params = [
+            p
+            for name in decoder_layer_names
+            for p in student.get_submodule(name).parameters()
+        ] + list(student.model.projection.parameters())
+    else:
+        decoder_params = list(student.model.decoder.parameters()) + list(
+            student.model.projection.parameters()
+        )
 
     weight_decay = getattr(config, "weight_decay", 1.0e-5)
     grad_clip_norm = getattr(config, "grad_clip_norm", 1.0)
@@ -359,12 +437,14 @@ def train(
     print(f"KD alpha (configured): {getattr(config, 'kd_alpha', None)}")
     print(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.1f}%)")
     if train_components in ("encoder", "all"):
+        scope = f"surgical, {len(encoder_layer_names)} pruned pwconv pairs" if encoder_surgical else "whole encoder (fallback)"
         print(
-            f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e}"
+            f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e} [{scope}]"
         )
     if train_components in ("decoder", "all"):
+        scope = f"surgical, {len(decoder_layer_names)} pruned linear pairs + projection" if decoder_surgical else "whole decoder + projection (fallback)"
         print(
-            f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e}"
+            f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e} [{scope}]"
         )
 
     betas = tuple(getattr(config, "betas", (0.9, 0.999)))
@@ -480,8 +560,62 @@ def train(
 
     save_resume = getattr(config, "save_resume_checkpoint", True)
 
+    def _save_best(epoch, val_loss, fense):
+        best_path = os.path.join(save_dir, "best")
+        os.makedirs(best_path, exist_ok=True)
+        # Save only the state dict — the config does not reflect pruned dimensions,
+        # so from_pretrained would cause shape mismatches on reload.
+        # Loading requires: rebuild_conette_from_dims() first, then load_state_dict().
+        torch.save(student.state_dict(), os.path.join(best_path, "pytorch_model.bin"))
+        with open(os.path.join(best_path, "meta.json"), "w") as f:
+            json.dump({"epoch": epoch, "val_loss": val_loss, "fense": fense}, f, indent=2)
+
+    def _log_row(row):
+        with open(os.path.join(save_dir, "training_log.jsonl"), "a") as log_f:
+            json.dump(row, log_f)
+            log_f.write("\n")
+
+    # Baseline (epoch -1): the immediately-post-pruning, untrained state. Everything
+    # later is judged against this — without it we'd only know "epoch 0 beat epoch 1..N",
+    # not whether epoch 0 itself already beat doing nothing at all. Skipped on resume
+    # (start_epoch > 0): already computed in the interrupted run, and best_val_metric was
+    # just restored from the resume checkpoint above.
+    if start_epoch == 0 and val_loader is not None:
+        base_val_loss, base_fense = _evaluate(
+            student,
+            teacher,
+            val_loader,
+            dataset_name,
+            mode,
+            getattr(config, "kd_alpha", 0.5),
+            encoder_pruned,
+        )
+        best_val_metric = -base_fense
+        print(f"[baseline] val_loss={base_val_loss:.4f} fense={base_fense:.4f}")
+        _save_best(-1, base_val_loss, base_fense)
+        _log_row(
+            {
+                "epoch": -1,
+                "train_loss": None,
+                "train_ce": None,
+                "train_kd": None,
+                "val_loss": round(base_val_loss, 6),
+                "fense": round(base_fense, 6),
+                "grad_norm": None,
+                "is_best": True,
+                "lr": None,
+            }
+        )
+        if wb is not None:
+            wb.log(
+                {"val_loss": base_val_loss, "fense": base_fense, "is_best": True},
+                step=-1,
+            )
+
     for epoch in range(start_epoch, num_epochs):
-        _set_student_train_mode(student, train_components)
+        _set_student_train_mode(
+            student, train_components, encoder_surgical, decoder_surgical
+        )
         epoch_loss = epoch_ce = epoch_kd = 0.0
         epoch_grad_norm = 0.0
         n_steps = 0
@@ -544,57 +678,34 @@ def train(
             f"avg_grad_norm={avg_grad_norm:.4e}"
         )
 
+        val_loss = fense = None
+        # monitor: "lower is better" internally throughout (matches best_val_metric's
+        # math.inf init). FENSE is higher-is-better, so it's negated here; val_loss and
+        # fense themselves are stored/printed/logged in their natural, readable sign.
         monitor = avg_loss
-        val_loss = None
         if val_loader is not None:
-            student.eval()
-            val_loss_sum, n_val = 0.0, 0
-            with torch.no_grad():
-                for raw_batch in val_loader:
-                    # deterministic caption selection: val_loss must be reproducible
-                    # across epochs/configs, not perturbed by random caption sampling.
-                    batch = prepare_batch(
-                        student, raw_batch, dataset_name, deterministic=True
-                    )
-                    t_audio_batch = None
-                    if mode != "encoder_ce" and encoder_pruned:
-                        t_audio_batch = teacher.preprocessor(
-                            raw_batch["audio"], raw_batch["sr"]
-                        )
-                    loss, _, _, _ = train_step(
-                        student.model,
-                        teacher.model,
-                        batch,
-                        teacher_audio_batch=t_audio_batch,
-                        mode=mode,
-                        alpha=getattr(config, "kd_alpha", 0.5),
-                    )
-                    val_loss_sum += loss.item()
-                    n_val += 1
-            val_loss = val_loss_sum / max(n_val, 1)
-            monitor = val_loss
-            print(f"  val_loss={val_loss:.4f}")
-            
-        fense = None
-        if val_loader is not None:
-            fense = run_fense_val(student, val_loader, dataset_name)
-            print(f"  fense={fense:.4f}")
+            val_loss, fense = _evaluate(
+                student,
+                teacher,
+                val_loader,
+                dataset_name,
+                mode,
+                getattr(config, "kd_alpha", 0.5),
+                encoder_pruned,
+            )
+            monitor = -fense
+            print(f"  val_loss={val_loss:.4f} fense={fense:.4f}")
 
         is_best = monitor < best_val_metric
         if is_best:
             best_val_metric = monitor
             epochs_no_improve = 0
-            best_path = os.path.join(save_dir, "best")
-            os.makedirs(best_path, exist_ok=True)
-            # Save only the state dict — the config does not reflect pruned dimensions,
-            # so from_pretrained would cause shape mismatches on reload.
-            # Loading requires: rebuild_conette_from_dims() first, then load_state_dict().
-            torch.save(
-                student.state_dict(), os.path.join(best_path, "pytorch_model.bin")
+            _save_best(epoch, val_loss, fense)
+            print(
+                f"  => New best saved (fense={fense:.4f})"
+                if fense is not None
+                else f"  => New best saved (val_loss={monitor:.4f})"
             )
-            with open(os.path.join(best_path, "meta.json"), "w") as f:
-                json.dump({"epoch": epoch, "val_loss": monitor}, f, indent=2)
-            print(f"  => New best saved (val_loss={monitor:.4f})")
         else:
             epochs_no_improve += 1
             print(f"  No improvement ({epochs_no_improve}/{patience})")
@@ -611,9 +722,7 @@ def train(
             "is_best": is_best,
             "lr": epoch_lr,
         }
-        with open(os.path.join(save_dir, "training_log.jsonl"), "a") as log_f:
-            json.dump(log_row, log_f)
-            log_f.write("\n")
+        _log_row(log_row)
 
         if wb is not None:
             wb_row = {
@@ -700,7 +809,7 @@ def main():
     if config.pruning_score_mode == "wanda":
         train_subset = "train" if config.dataset == "audiocaps" else "dev"
         calib_loader = build_dataloader(config.dataset, train_subset, batch_size=1)
-    student, _ = prune_conette(student, verbose=True, loader=calib_loader)
+    student, pruned_layer_names = prune_conette(student, verbose=True, loader=calib_loader)
     student_hidden_dims = get_conette_hidden_dims(student)
     print(f"Student architecture hidden dims: {student_hidden_dims}")
 
@@ -718,6 +827,7 @@ def main():
         mode=config.kd_mode,
         train_components=getattr(config, "kd_train_components", "all"),
         student_hidden_dims=student_hidden_dims,
+        pruned_layer_names=pruned_layer_names,
     )
 
 
