@@ -1,0 +1,11 @@
+{"epoch": -1, "train_loss": null, "train_ce": null, "train_kd": null, "val_loss": 4.985307, "fense": 0.47497, "grad_norm": null, "is_best": true, "lr": null}
+{"epoch": 0, "train_loss": 4.189693, "train_ce": 4.189693, "train_kd": 0.0, "val_loss": 4.984855, "fense": 0.475296, "grad_norm": 0.121495, "is_best": true, "lr": [1e-06, 1e-06]}
+{"epoch": 1, "train_loss": 4.16316, "train_ce": 4.16316, "train_kd": 0.0, "val_loss": 4.973899, "fense": 0.483851, "grad_norm": 0.1048, "is_best": true, "lr": [0.0005005, 0.0005005]}
+{"epoch": 2, "train_loss": 4.126843, "train_ce": 4.126843, "train_kd": 0.0, "val_loss": 4.973697, "fense": 0.488737, "grad_norm": 0.066043, "is_best": true, "lr": [0.001, 0.001]}
+{"epoch": 3, "train_loss": 4.103435, "train_ce": 4.103435, "train_kd": 0.0, "val_loss": 4.972536, "fense": 0.493446, "grad_norm": 0.055678, "is_best": true, "lr": [0.0009619397662556434, 0.0009619397662556434]}
+{"epoch": 4, "train_loss": 4.087029, "train_ce": 4.087029, "train_kd": 0.0, "val_loss": 4.969614, "fense": 0.50097, "grad_norm": 0.04722, "is_best": true, "lr": [0.0008535533905932738, 0.0008535533905932738]}
+{"epoch": 5, "train_loss": 4.070042, "train_ce": 4.070042, "train_kd": 0.0, "val_loss": 4.971258, "fense": 0.490656, "grad_norm": 0.046042, "is_best": false, "lr": [0.0006913417161825451, 0.0006913417161825451]}
+{"epoch": 6, "train_loss": 4.059079, "train_ce": 4.059079, "train_kd": 0.0, "val_loss": 4.97171, "fense": 0.50112, "grad_norm": 0.0437, "is_best": true, "lr": [0.0005000000000000001, 0.0005000000000000001]}
+{"epoch": 7, "train_loss": 4.057368, "train_ce": 4.057368, "train_kd": 0.0, "val_loss": 4.971977, "fense": 0.496524, "grad_norm": 0.041769, "is_best": false, "lr": [0.0003086582838174552, 0.0003086582838174552]}
+{"epoch": 8, "train_loss": 4.044684, "train_ce": 4.044684, "train_kd": 0.0, "val_loss": 4.971125, "fense": 0.498597, "grad_norm": 0.041637, "is_best": false, "lr": [0.0001464466094067263, 0.0001464466094067263]}
+{"epoch": 9, "train_loss": 4.042872, "train_ce": 4.042872, "train_kd": 0.0, "val_loss": 4.971117, "fense": 0.497984, "grad_norm": 0.038541, "is_best": false, "lr": [3.8060233744356646e-05, 3.8060233744356646e-05]}
