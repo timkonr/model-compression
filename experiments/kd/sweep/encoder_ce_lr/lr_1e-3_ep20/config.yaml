@@ -1,0 +1,38 @@
+# LR sweep (encoder-only target, mode=encoder_ce) — Experiment_Redo_TODO.md #2/#3.
+# See lr_1e-6/config.yaml in this same sweep for the full rationale.
+#
+# Budget extension, not a fresh grid point: the 10-epoch run at this LR (lr_1e-3/) peaked
+# early (epoch 4, FENSE 0.50097) and got noisy afterwards (0.4907/0.5011/0.4965/0.4986/
+# 0.4980) without clearly diverging (grad_norm kept falling cleanly) — unclear whether
+# that's a genuine plateau/mild overfit or just not enough budget to settle. Rerun from
+# scratch with num_epochs=20 (fresh save_dir, not a resume — see lr_5e-4_ep20/config.yaml
+# for why resuming with a bumped num_epochs breaks the cosine scheduler's saved T_max) so
+# this is judged on the same budget as the 5e-4 extension.
+# Run: mc-train-kd --config experiments/kd/sweep/encoder_ce_lr/lr_1e-3_ep20/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: encoder_ce
+  train_components: encoder
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 1e-3
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/sweep/encoder_ce_lr/lr_1e-3_ep20
+
+data_folder: data/
+model_folder: model/

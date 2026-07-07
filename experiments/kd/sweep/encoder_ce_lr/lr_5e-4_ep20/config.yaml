@@ -1,0 +1,37 @@
+# LR sweep (encoder-only target, mode=encoder_ce) — Experiment_Redo_TODO.md #2/#3.
+# See lr_1e-6/config.yaml in this same sweep for the full rationale.
+#
+# Budget extension, not a fresh grid point: the 10-epoch run at this LR (lr_5e-4/) was
+# still improving at epoch 9 (is_best=true on the last epoch) — i.e. cut off mid-climb,
+# not converged. Rerun from scratch with num_epochs=20 (fresh save_dir, not a resume of
+# lr_5e-4/: the cosine scheduler bakes T_max into its checkpoint state, so bumping
+# num_epochs and resuming would load a stale T_max=8 schedule instead of the intended
+# T_max=18 one) to see where this LR actually plateaus before comparing it to 1e-3.
+# Run: mc-train-kd --config experiments/kd/sweep/encoder_ce_lr/lr_5e-4_ep20/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: encoder_ce
+  train_components: encoder
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 5e-4
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/sweep/encoder_ce_lr/lr_5e-4_ep20
+
+data_folder: data/
+model_folder: model/
