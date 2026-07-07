@@ -1,0 +1,43 @@
+# Diagnostic: is the "epoch 0 always best, no recovery" pattern at 60% encoder pruning
+# caused by the FROZEN decoder (train_components=encoder), or is it a genuine operating-point
+# property of the pruned encoder regardless of what's trainable?
+#
+# Same 60%-encoder-pruned config, same mode (encoder_ce, to keep this a clean supervised
+# fine-tune with no teacher-forward complexity) as experiments/kd/sweep/encoder_ce_lr/lr_1e-5,
+# but train_components=all instead of encoder — decoder+projection are now also trainable.
+# lr_encoder reused from the encoder_ce_lr sweep (clearest signal at 1e-5); lr (decoder)
+# reused from the already-frozen decoder_lr winner (1e-4) — not re-tuned here, this run is
+# about isolating train_components, not finding a new joint optimum.
+#
+# Read alongside training_log.jsonl's new "grad_norm" column (added specifically for this
+# question): a near-zero grad_norm on the encoder throughout would point to a vanishing
+# gradient through the frozen decoder; a healthy-but-unhelpful grad_norm points to a genuine
+# operating point instead.
+# Run: mc-train-kd --config experiments/kd/diagnostic/all_vs_encoder_60pct/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: encoder_ce
+  train_components: all
+  lr: 1.0e-4
+  lr_encoder: 1e-5
+  num_epochs: 10
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/diagnostic/all_vs_encoder_60pct
+
+data_folder: data/
+model_folder: model/
