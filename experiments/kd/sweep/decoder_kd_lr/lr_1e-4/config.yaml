@@ -1,0 +1,39 @@
+# LR sweep (decoder-only 80%, pure KD (Minitron BP #5)) — Experiment_Redo_TODO.md #2/#3, Phase A.
+# Decoder-Pruning auf 0.8 statt 0.5: bei 50% ist der Schaden zu klein, um Recovery sauber
+# zu messen; bei 80% liegt SPIDEr ~10% unter Baseline -> echtes Gradientensignal.
+# Redo noetig, weil (a) der alte decoder_lr-Sweep bei 50% lief und (b) unter dem
+# chirurgischen Fix nur noch die geprunten linear1/linear2-Paare + Projection trainieren
+# (vorher ganzer Decoder inkl. Attention/Embeddings) — anderes Optimierungsproblem.
+# WICHTIG: Sweep-Vergleich auf bestem Val-FENSE (siehe training_log.jsonl / best/meta.json),
+# nie auf val_loss und nie auf test. num_epochs=20 fix in allen Sweeps UND der Ablation,
+# damit der Cosine-Schedule identisch ist (Budget aendert den effektiven LR-Verlauf).
+# patience=999: Sweeps laufen volle Laenge, Early Stopping erst in der Ablation.
+# Run: mc-train-kd --config experiments/kd/sweep/decoder_kd_lr/lr_1e-4/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.8
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: decoder
+  alpha: 0.0
+  lr: 1e-4
+  lr_encoder: 1.0e-6  # unused (encoder frozen)
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999
+  warmup_epochs: 2
+  save_dir: experiments/kd/sweep/decoder_kd_lr/lr_1e-4
+
+data_folder: data/
+model_folder: model/

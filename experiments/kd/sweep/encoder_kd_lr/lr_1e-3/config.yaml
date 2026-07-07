@@ -1,0 +1,38 @@
+# LR sweep (encoder-only 60%, mode=pure_kd) — Experiment_Redo_TODO.md #2/#3, Phase A.
+# Redo unter dem chirurgischen Fix (nur geprunte pwconv1/pwconv2-Paare trainierbar):
+# der alte encoder_lr-Sweep (1e-8..1e-5, "kein Recovery bei keiner LR") lief unter
+# Ganz-Encoder-Training und ist obsolet. Grid um den encoder_ce-Gewinnerbereich zentriert
+# (5e-4/1e-3), da die trainierbare Parametermenge jetzt in beiden Loss-Modi identisch ist.
+# WICHTIG: Sweep-Vergleich auf bestem Val-FENSE (siehe training_log.jsonl / best/meta.json),
+# nie auf val_loss und nie auf test. num_epochs=20 fix in allen Sweeps UND der Ablation,
+# damit der Cosine-Schedule identisch ist (Budget aendert den effektiven LR-Verlauf).
+# patience=999: Sweeps laufen volle Laenge, Early Stopping erst in der Ablation.
+# Run: mc-train-kd --config experiments/kd/sweep/encoder_kd_lr/lr_1e-3/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: encoder
+  alpha: 0.0
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 1e-3
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999
+  warmup_epochs: 2
+  save_dir: experiments/kd/sweep/encoder_kd_lr/lr_1e-3
+
+data_folder: data/
+model_folder: model/
