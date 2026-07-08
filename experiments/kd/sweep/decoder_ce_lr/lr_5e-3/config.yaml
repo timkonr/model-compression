@@ -1,0 +1,32 @@
+# LR sweep (decoder-only 80%, pure CE (mode=encoder_ce, kein Teacher-Forward; Mode-Name historisch = 'CE-only')) — Experiment_Redo_TODO.md #2/#3, Phase A.
+# Grid-Erweiterung: oberer Rand. Bisheriger Bestwert 1e-3 (0.5036) liegt am Grid-Rand und nur +0.0004 ueber 5e-4 (Plateau-Verdacht); dieser Punkt prueft, ob dahinter noch etwas kommt oder das Plateau abfaellt.
+# WICHTIG: Sweep-Vergleich auf bestem Val-FENSE, nie auf val_loss und nie auf test.
+# num_epochs=20 fix (identischer Cosine-Schedule wie alle anderen Phase-A-Sweeps).
+# Run: mc-train-kd --config experiments/kd/sweep/decoder_ce_lr/lr_5e-3/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.8
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: encoder_ce
+  train_components: decoder
+  lr: 5e-3
+  lr_encoder: 1.0e-6  # unused (encoder frozen)
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/sweep/decoder_ce_lr/lr_5e-3
+
+data_folder: data/
+model_folder: model/
