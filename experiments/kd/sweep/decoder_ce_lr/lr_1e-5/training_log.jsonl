@@ -1,0 +1,21 @@
+{"epoch": -1, "train_loss": null, "train_ce": null, "train_kd": null, "val_loss": 5.28117, "fense": 0.482292, "grad_norm": null, "is_best": true, "lr": null}
+{"epoch": 0, "train_loss": 4.566688, "train_ce": 4.566688, "train_kd": 0.0, "val_loss": 5.281148, "fense": 0.482292, "grad_norm": 0.505195, "is_best": false, "lr": [1e-08, 1e-08]}
+{"epoch": 1, "train_loss": 4.556176, "train_ce": 4.556176, "train_kd": 0.0, "val_loss": 5.27098, "fense": 0.484296, "grad_norm": 0.490636, "is_best": true, "lr": [5.005e-06, 5.005e-06]}
+{"epoch": 2, "train_loss": 4.553786, "train_ce": 4.553786, "train_kd": 0.0, "val_loss": 5.253418, "fense": 0.487328, "grad_norm": 0.451143, "is_best": true, "lr": [1e-05, 1e-05]}
+{"epoch": 3, "train_loss": 4.524207, "train_ce": 4.524207, "train_kd": 0.0, "val_loss": 5.239152, "fense": 0.491778, "grad_norm": 0.392729, "is_best": true, "lr": [9.924038765061042e-06, 9.924038765061042e-06]}
+{"epoch": 4, "train_loss": 4.515761, "train_ce": 4.515761, "train_kd": 0.0, "val_loss": 5.227392, "fense": 0.490512, "grad_norm": 0.360188, "is_best": false, "lr": [9.698463103929542e-06, 9.698463103929542e-06]}
+{"epoch": 5, "train_loss": 4.509066, "train_ce": 4.509066, "train_kd": 0.0, "val_loss": 5.21756, "fense": 0.49024, "grad_norm": 0.335277, "is_best": false, "lr": [9.330127018922194e-06, 9.330127018922194e-06]}
+{"epoch": 6, "train_loss": 4.485298, "train_ce": 4.485298, "train_kd": 0.0, "val_loss": 5.209124, "fense": 0.489748, "grad_norm": 0.321656, "is_best": false, "lr": [8.830222215594889e-06, 8.830222215594889e-06]}
+{"epoch": 7, "train_loss": 4.476224, "train_ce": 4.476224, "train_kd": 0.0, "val_loss": 5.202087, "fense": 0.490666, "grad_norm": 0.30084, "is_best": false, "lr": [8.213938048432695e-06, 8.213938048432695e-06]}
+{"epoch": 8, "train_loss": 4.472423, "train_ce": 4.472423, "train_kd": 0.0, "val_loss": 5.196176, "fense": 0.490926, "grad_norm": 0.291342, "is_best": false, "lr": [7.4999999999999985e-06, 7.4999999999999985e-06]}
+{"epoch": 9, "train_loss": 4.468304, "train_ce": 4.468304, "train_kd": 0.0, "val_loss": 5.1912, "fense": 0.49113, "grad_norm": 0.285002, "is_best": false, "lr": [6.710100716628343e-06, 6.710100716628343e-06]}
+{"epoch": 10, "train_loss": 4.460312, "train_ce": 4.460312, "train_kd": 0.0, "val_loss": 5.187024, "fense": 0.492098, "grad_norm": 0.277943, "is_best": true, "lr": [5.868240888334652e-06, 5.868240888334652e-06]}
+{"epoch": 11, "train_loss": 4.455017, "train_ce": 4.455017, "train_kd": 0.0, "val_loss": 5.183617, "fense": 0.492639, "grad_norm": 0.26889, "is_best": true, "lr": [4.9999999999999996e-06, 4.9999999999999996e-06]}
+{"epoch": 12, "train_loss": 4.443958, "train_ce": 4.443958, "train_kd": 0.0, "val_loss": 5.180909, "fense": 0.493356, "grad_norm": 0.268748, "is_best": true, "lr": [4.131759111665348e-06, 4.131759111665348e-06]}
+{"epoch": 13, "train_loss": 4.447092, "train_ce": 4.447092, "train_kd": 0.0, "val_loss": 5.178844, "fense": 0.493397, "grad_norm": 0.263393, "is_best": true, "lr": [3.289899283371658e-06, 3.289899283371658e-06]}
+{"epoch": 14, "train_loss": 4.44354, "train_ce": 4.44354, "train_kd": 0.0, "val_loss": 5.177308, "fense": 0.493516, "grad_norm": 0.264125, "is_best": true, "lr": [2.500000000000001e-06, 2.500000000000001e-06]}
+{"epoch": 15, "train_loss": 4.438502, "train_ce": 4.438502, "train_kd": 0.0, "val_loss": 5.17621, "fense": 0.493344, "grad_norm": 0.261378, "is_best": false, "lr": [1.7860619515673032e-06, 1.7860619515673032e-06]}
+{"epoch": 16, "train_loss": 4.449253, "train_ce": 4.449253, "train_kd": 0.0, "val_loss": 5.175492, "fense": 0.493302, "grad_norm": 0.254571, "is_best": false, "lr": [1.1697777844051105e-06, 1.1697777844051105e-06]}
+{"epoch": 17, "train_loss": 4.445118, "train_ce": 4.445118, "train_kd": 0.0, "val_loss": 5.175075, "fense": 0.49302, "grad_norm": 0.258101, "is_best": false, "lr": [6.698729810778076e-07, 6.698729810778076e-07]}
+{"epoch": 18, "train_loss": 4.431808, "train_ce": 4.431808, "train_kd": 0.0, "val_loss": 5.174887, "fense": 0.493016, "grad_norm": 0.257741, "is_best": false, "lr": [3.015368960704584e-07, 3.015368960704584e-07]}
+{"epoch": 19, "train_loss": 4.440726, "train_ce": 4.440726, "train_kd": 0.0, "val_loss": 5.174839, "fense": 0.492908, "grad_norm": 0.260722, "is_best": false, "lr": [7.59612349389599e-08, 7.59612349389599e-08]}
