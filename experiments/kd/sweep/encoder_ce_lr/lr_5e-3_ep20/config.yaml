@@ -1,0 +1,32 @@
+# LR sweep (encoder-only 60%, mode=encoder_ce) — Experiment_Redo_TODO.md #2/#3, Phase A.
+# Grid-Rand-Erweiterung: 1e-3 ist bisher der beste CE-Punkt (0.5028@20ep), liegt aber am oberen Grid-Rand. Analog zum encoder_kd_lr-Sweep (wo 5e-3 gegenueber 1e-3 abfaellt und den Peak einrahmt) wird eine Dekade hoeher geprueft, damit der CE-Gewinner ebenfalls von beiden Seiten eingerahmt ist.
+# WICHTIG: Sweep-Vergleich auf bestem Val-FENSE, nie auf val_loss und nie auf test.
+# num_epochs=20 fix (identischer Cosine-Schedule wie alle anderen Phase-A-Sweeps).
+# Run: mc-train-kd --config experiments/kd/sweep/encoder_ce_lr/lr_5e-3_ep20/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: encoder_ce
+  train_components: encoder
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 5e-3
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/sweep/encoder_ce_lr/lr_5e-3_ep20
+
+data_folder: data/
+model_folder: model/
