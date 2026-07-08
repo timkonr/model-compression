@@ -1,0 +1,36 @@
+# Hybrid-LR-Mini-Check (encoder-only 60%, hybrid alpha=0.5) — Phase A -> B Bruecke.
+# Kein eigener voller Sweep fuer hybrid: getestet werden nur die beiden Kandidaten-LRs
+# der Einzel-Losses dieser Komponente (CE-Gewinner 1e-3, KD-Gewinner 5e-4); Begruendung:
+# hybrid = alpha*CE + (1-alpha)*KD interpoliert beide Zielfunktionen, sein Optimum liegt
+# plausibel bei einem der beiden Einzeloptima. Der Gewinner (bestes Val-FENSE) wird in
+# experiments/kd/ablation/loss/encoder_hybrid/seed_*/config.yaml eingetragen; dieser Lauf
+# selbst IST dann der Seed-42-Ablation-Lauf (identische Bedingungen — keine Wiederholung).
+# Run: mc-train-kd --config experiments/kd/sweep/encoder_hybrid_lr/lr_5e-4/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: hybrid
+  train_components: encoder
+  alpha: 0.5
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 5e-4
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/sweep/encoder_hybrid_lr/lr_5e-4
+
+data_folder: data/
+model_folder: model/
