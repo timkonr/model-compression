@@ -1,0 +1,36 @@
+# KLD-vs-CE Loss-Ablation (Todo #3, Phase B) — encoder-only 60%, pure CE (mode=encoder_ce, kein Teacher-Forward), seed 44.
+# Achse: Loss (mode/alpha) x Komponente (decoder@80% / encoder@60%) x 3 Seeds,
+# jeder Loss an seiner EIGENEN Gewinner-LR aus den Phase-A-Sweeps (faire Vergleiche).
+# WICHTIG: Vergleich der Losses NUR auf Val-FENSE der Best-Checkpoints (SPIDEr einmalig
+# auf Test erst nach der Loss-Entscheidung) — NICHT auf val_loss (andere Zielfunktionen).
+# Gleicher Seed = identisch geprunter Student -> Loss-Vergleiche innerhalb eines Seeds
+# sind GEPAART; paarweise Differenzen pro Seed berichten, nicht nur mean+-std.
+# patience=999: volle Laenge statt Early Stopping — FENSE-Best-Checkpoint-Auswahl deckt 'bis Konvergenz' ab.
+# Run: mc-train-kd --config experiments/kd/ablation/loss/encoder_ce/seed_44/config.yaml
+
+model: conette
+dataset: clotho
+seed: 44
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: encoder_ce
+  train_components: encoder
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 1e-3  # encoder_ce_lr-Sweep: Plateau 1e-3..5e-3 (0.5028/0.5033, delta unter Rauschband ~0.003) -> niedrigerer, beidseitig eingerahmter Punkt statt Grid-Rand
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # volle 20 Epochen: beobachtete FENSE-Rauschluecken bis 6 Epochen zwischen is_best-Events (decoder_ce 1e-3) machen patience=5 riskant; einheitliches Budget vermeidet Selektionsbias zwischen glatten (KD) und verrauschten (CE) Laeufen
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/loss/encoder_ce/seed_44
+
+data_folder: data/
+model_folder: model/

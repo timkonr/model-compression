@@ -1,0 +1,39 @@
+# KLD-vs-CE Loss-Ablation (Todo #3, Phase B) — decoder-only 80%, hybrid alpha=0.1 (Hinton et al. 2015: niedriges Hard-Target-Gewicht; Mini-Check-Gewinner), seed 43.
+# Decoder-Ratio 0.8 statt 0.5: bei 50% zu wenig Schaden fuer messbares Recovery,
+# bei 80% ~10% SPIDEr-Verlust -> echtes Signal (siehe decoder-Sweep-Configs).
+# Achse: Loss (mode/alpha) x Komponente (decoder@80% / encoder@60%) x 3 Seeds,
+# jeder Loss an seiner EIGENEN Gewinner-LR aus den Phase-A-Sweeps (faire Vergleiche).
+# WICHTIG: Vergleich der Losses NUR auf Val-FENSE der Best-Checkpoints (SPIDEr einmalig
+# auf Test erst nach der Loss-Entscheidung) — NICHT auf val_loss (andere Zielfunktionen).
+# Gleicher Seed = identisch geprunter Student -> Loss-Vergleiche innerhalb eines Seeds
+# sind GEPAART; paarweise Differenzen pro Seed berichten, nicht nur mean+-std.
+# patience=999: volle Laenge statt Early Stopping — FENSE-Best-Checkpoint-Auswahl deckt 'bis Konvergenz' ab.
+# Run: mc-train-kd --config experiments/kd/ablation/loss/decoder_hybrid/seed_43/config.yaml
+
+model: conette
+dataset: clotho
+seed: 43
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.8
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: hybrid
+  train_components: decoder
+  alpha: 0.1  # Gewinner des alpha-Mini-Checks (Hinton-konform niedriges Hard-Target-Gewicht); monoton: CE < a0.5 < a0.1 ~ pure_kd
+  lr: 5e-4  # Hybrid-Mini-Check (seed 42): alpha=0.1@5e-4 (0.5099) > alpha=0.5@1e-3 (0.5072) ~ alpha=0.5@5e-4 (0.5071)
+  lr_encoder: 1.0e-6  # unused (encoder frozen)
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # volle 20 Epochen: beobachtete FENSE-Rauschluecken bis 6 Epochen zwischen is_best-Events (decoder_ce 1e-3) machen patience=5 riskant; einheitliches Budget vermeidet Selektionsbias zwischen glatten (KD) und verrauschten (CE) Laeufen
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/loss/decoder_hybrid/seed_43
+
+data_folder: data/
+model_folder: model/
