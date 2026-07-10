@@ -1,0 +1,35 @@
+# Pruning-Ratio-Ablation (Todo #4, Stufe 1: Screening) — decoder-only @ 50 %, seed 42.
+# Fixiert aus der Loss-Ablation (Todo #3): pure_kd, LR 5e-4, 20 Epochen, Val-FENSE-Selektion.
+# LR-Transfer-Annahme (Limitation, in MA dokumentieren): die LR wurde bei enc@60 %/dec@80 %
+# getunt und wird ueber die Ratios uebernommen — ein Sweep pro Ratio ist nicht budgetierbar.
+# Stufe 1 = Kurvenform auf Seed 42 (Baseline epoch -1 + Recovery-Best-FENSE pro Punkt);
+# Pareto-Punkte werden danach in Stufe 2 mit Seeds 43/44 bestaetigt.
+# Run: mc-train-kd --config experiments/kd/ablation/ratio/dec_50/seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.5
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: decoder
+  alpha: 0.0
+  lr: 5e-4  # Gewinner decoder_kd_lr-Sweep (getunt @80 %)
+  lr_encoder: 1.0e-6  # unused (encoder frozen)
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/ratio/dec_50/seed_42
+
+data_folder: data/
+model_folder: model/

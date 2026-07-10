@@ -1,0 +1,40 @@
+# >>> NICHT AUSFUEHREN <<<
+# Das Seed-42-Ergebnis dieses Ratio-Punkts ist der config-identische Lauf:
+#   experiments/kd/sweep/encoder_kd_lr/lr_5e-4
+# (gleicher Seed, gleiches Budget, gleiche HPs). Diese Datei dokumentiert nur den
+# Punkt im Ratio-Grid; die Auswertung liest training_log.jsonl aus dem Quell-Pfad.
+# Pruning-Ratio-Ablation (Todo #4, Stufe 1: Screening) — encoder-only @ 60 %, seed 42.
+# Fixiert aus der Loss-Ablation (Todo #3): pure_kd, LR 5e-4, 20 Epochen, Val-FENSE-Selektion.
+# LR-Transfer-Annahme (Limitation, in MA dokumentieren): die LR wurde bei enc@60 %/dec@80 %
+# getunt und wird ueber die Ratios uebernommen — ein Sweep pro Ratio ist nicht budgetierbar.
+# Stufe 1 = Kurvenform auf Seed 42 (Baseline epoch -1 + Recovery-Best-FENSE pro Punkt);
+# Pareto-Punkte werden danach in Stufe 2 mit Seeds 43/44 bestaetigt.
+# Run: mc-train-kd --config experiments/kd/ablation/ratio/enc_60/seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: encoder
+  alpha: 0.0
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 5e-4  # Gewinner encoder_kd_lr-Sweep (getunt @60 %)
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/ratio/enc_60/seed_42
+
+data_folder: data/
+model_folder: model/
