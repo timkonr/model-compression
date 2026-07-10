@@ -1,0 +1,23 @@
+# Finale Test-Evaluation (SPIDEr/FENSE/METEOR auf Clotho-eval) — NUR fuer die
+# Loss-Ablation-GEWINNER (pure_kd), einmalig nach der Loss-Entscheidung (Todo #3).
+# Val-FENSE hat entschieden; das Test-Set war bis hierher unangetastet und liefert
+# jetzt die zitierfaehigen Zahlen inkl. Seed-Streuung (3 Seeds je Komponente).
+# Checkpoint: experiments/kd/ablation/loss/encoder_pure_kd/seed_44/best
+# (Architektur wird aus run_config.json neben best/ rekonstruiert — kein Wanda-Rerun.)
+# Run: python src/evaluate.py --config experiments/kd/ablation/loss/eval/encoder_pure_kd_seed_44/config.yaml
+
+model: conette
+dataset: clotho
+seed: 44
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/loss/encoder_pure_kd/seed_44/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
