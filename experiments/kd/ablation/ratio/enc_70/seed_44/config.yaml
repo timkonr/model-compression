@@ -1,0 +1,38 @@
+# Pruning-Ratio-Ablation (Todo #4, Stufe 2: 3-Seed-Bestaetigung) — encoder-only @ 70 %, seed 44.
+# Config-identisch zu enc_70/seed_42 (Stufe-1-Screening), nur der Seed variiert
+# (anderer Seed = anderes Calibration-Sample = anders geprunter Student).
+# Stufe 2 bestaetigt die Punkte, an denen die MA eine Differenz-/Gleichheitsaussage macht:
+# enc_70/enc_80 (Abfall hinter dem Knie bei 60-70 % ist kein Seed-Rauschen) und
+# dec_90 (Decoder-Recovery auf Plateau-Niveau auch bei 90 %). Zusammen mit den
+# 3-Seed-Zellen aus der Loss-Ablation (enc_60 = encoder_pure_kd, dec_80 = decoder_pure_kd)
+# ergibt das 3-Seed-Kurven ueber enc {60,70,80} und dec {80,90}.
+# Fixiert aus der Loss-Ablation (Todo #3): pure_kd, LR 5e-4, 20 Epochen, Val-FENSE-Selektion.
+# Run: mc-train-kd --config experiments/kd/ablation/ratio/enc_70/seed_44/config.yaml
+
+model: conette
+dataset: clotho
+seed: 44
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.7
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: encoder
+  alpha: 0.0
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 5e-4  # Gewinner encoder_kd_lr-Sweep (getunt @60 %)
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/ratio/enc_70/seed_44
+
+data_folder: data/
+model_folder: model/
