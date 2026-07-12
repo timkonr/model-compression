@@ -1,0 +1,41 @@
+# Kombi-Ablation (Todo #4, Stufe 3) — encoder@60 % + decoder@90 % kombiniert geprunt,
+# Distill-Ziel: beide Komponenten (getrennte LR-Gruppen je chirurgischer Parametermenge), seed 42 (Screening; bestes Ziel wird danach mit Seeds 43/44 bestaetigt).
+# Zwei Fragen in einem Design:
+# (a) Kombi-Effekt: addieren sich die Einzelschaeden (enc_60: Plateau, dec_90: Plateau)
+#     oder interagieren sie? Vergleich gegen die Single-Component-3-Seed-Zellen.
+# (b) Distill-Ziel (Kernvergleich der Erstabgabe, jetzt konvergent + val-selektiert):
+#     encoder-only vs. decoder-only vs. beide — bei 'all' trainieren beide chirurgischen
+#     Parametermengen mit ihren jeweiligen Gewinner-LRs (getrennte Optimizer-Gruppen).
+# Fixiert aus Todo #3: pure_kd, LR je Komponente 5e-4 (Sweep-Gewinner, LR-Transfer-Annahme
+# wie in der Ratio-Ablation dokumentiert), 20 Epochen, Val-FENSE-Selektion.
+# WICHTIG: Ziel-Vergleich nur auf Val-FENSE; gleicher Seed = identisch geprunter Student
+# -> die drei Ziele sind GEPAART vergleichbar.
+# Run: mc-train-kd --config experiments/kd/ablation/combo/enc60_dec90/target_all/seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: all
+  alpha: 0.0
+  lr: 5e-4  # Gewinner decoder_kd_lr-Sweep
+  lr_encoder: 5e-4  # Gewinner encoder_kd_lr-Sweep
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/combo/enc60_dec90/target_all/seed_42
+
+data_folder: data/
+model_folder: model/
