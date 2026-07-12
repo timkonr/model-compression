@@ -1,0 +1,23 @@
+# Finale Test-Evaluation (SPIDEr/FENSE/METEOR auf Clotho-eval) — Ratio-/Kombi-Ablation
+# (Todo #4), einmalig nach Abschluss von Screening + 3-Seed-Bestaetigung.
+# Val-FENSE hat selektiert; das Test-Set liefert jetzt die zitierfaehigen Zahlen fuer
+# die Pareto-Front (SPIDEr vs. Groesse/FLOPs). 3-Seed-Zelle: alle Seeds evaluieren (Seed-Streuung auf Test berichten).
+# Checkpoint: experiments/kd/ablation/ratio/enc_80/seed_43/best
+# (Architektur wird aus run_config.json neben best/ rekonstruiert — kein Wanda-Rerun.)
+# Run: python src/evaluate.py --config experiments/kd/ablation/ratio/eval/enc_80_seed_43/config.yaml
+
+model: conette
+dataset: clotho
+seed: 43
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/ratio/enc_80/seed_43/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
