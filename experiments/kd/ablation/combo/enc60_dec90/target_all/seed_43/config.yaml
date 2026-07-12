@@ -1,0 +1,34 @@
+# Kombi-Ablation (Todo #4, Stufe 3) — encoder@60 % + decoder@90 % kombiniert geprunt,
+# Distill-Ziel: all (beide Komponenten, getrennte LR-Gruppen), seed 43.
+# 3-Seed-Bestaetigung des Ziel-Screenings (seed 42: all 0.5065 > decoder 0.5007 >
+# encoder 0.4891, gepaart auf identischem Studenten) — nur das Gewinner-Ziel wird bestaetigt.
+# Fixiert aus Todo #3: pure_kd, LR je Komponente 5e-4 (Sweep-Gewinner, LR-Transfer-Annahme
+# wie in der Ratio-Ablation dokumentiert), 20 Epochen, Val-FENSE-Selektion.
+# Run: mc-train-kd --config experiments/kd/ablation/combo/enc60_dec90/target_all/seed_43/config.yaml
+model: conette
+dataset: clotho
+seed: 43
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: all
+  alpha: 0.0
+  lr: 5e-4  # Gewinner decoder_kd_lr-Sweep
+  lr_encoder: 5e-4  # Gewinner encoder_kd_lr-Sweep
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/combo/enc60_dec90/target_all/seed_43
+
+data_folder: data/
+model_folder: model/
