@@ -8,9 +8,9 @@
   "flops": 92220537241,
   "device": "cuda:0",
   "eval_batch_size": 8,
-  "total_inference_time_in_s": "115.721",
-  "latency_ms_per_sample_mean": 109.33128356933594,
-  "latency_ms_per_sample_std": 17.299606323242188,
+  "total_inference_time_in_s": "109.868",
+  "latency_ms_per_sample_mean": 109.88349914550781,
+  "latency_ms_per_sample_std": 17.250394821166992,
   "predictions": [
     "a person is using a tool to cut a piece of wood",
     "a man is speaking on a radio with static in the background",

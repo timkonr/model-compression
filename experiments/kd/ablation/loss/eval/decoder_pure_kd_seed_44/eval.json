@@ -8,9 +8,9 @@
   "flops": 92153233408,
   "device": "cuda:0",
   "eval_batch_size": 8,
-  "total_inference_time_in_s": "117.118",
-  "latency_ms_per_sample_mean": 108.1922378540039,
-  "latency_ms_per_sample_std": 15.813575744628906,
+  "total_inference_time_in_s": "116.029",
+  "latency_ms_per_sample_mean": 119.67263793945312,
+  "latency_ms_per_sample_std": 17.505157470703125,
   "evaluation_results": {
     "cider_d": 0.484627546377206,
     "spice": 0.13897627866442902,

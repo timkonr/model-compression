@@ -8,9 +8,9 @@
   "flops": 72252858777,
   "device": "cuda:0",
   "eval_batch_size": 8,
-  "total_inference_time_in_s": "110.430",
-  "latency_ms_per_sample_mean": 108.46973419189453,
-  "latency_ms_per_sample_std": 19.673019409179688,
+  "total_inference_time_in_s": "113.374",
+  "latency_ms_per_sample_mean": 111.168212890625,
+  "latency_ms_per_sample_std": 19.89713478088379,
   "predictions": [
     "a machine is making a loud buzzing sound",
     "a man is speaking on a radio with static in the background",
