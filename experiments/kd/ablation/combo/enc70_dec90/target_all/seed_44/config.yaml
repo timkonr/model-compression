@@ -1,0 +1,35 @@
+# Kombi-Ablation (Todo #4, Stufe 3) — encoder@70 % + decoder@90 % kombiniert geprunt,
+# Distill-Ziel: all (beide Komponenten, getrennte LR-Gruppen), seed 44.
+# 3-Seed-Bestaetigung: enc70_dec90 fuehrt nach dem Seed-42-Screening die Pareto-Front an
+# (Test-SPIDEr 0.3086 = -0.3 % rel. bei -47 % Groesse / -48 % Parameter) — als tragender
+# Punkt der Thesis braucht er Seed-Varianz. Config-identisch zu seed_42.
+# Fixiert aus Todo #3: pure_kd, LR je Komponente 5e-4, 20 Epochen, Val-FENSE-Selektion.
+# Run: mc-train-kd --config experiments/kd/ablation/combo/enc70_dec90/target_all/seed_44/config.yaml
+
+model: conette
+dataset: clotho
+seed: 44
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.7
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: all
+  alpha: 0.0
+  lr: 5e-4  # Gewinner decoder_kd_lr-Sweep
+  lr_encoder: 5e-4  # Gewinner encoder_kd_lr-Sweep
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/combo/enc70_dec90/target_all/seed_44
+
+data_folder: data/
+model_folder: model/

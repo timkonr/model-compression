@@ -1,0 +1,20 @@
+# Finale Test-Evaluation (SPIDEr/FENSE/METEOR auf Clotho-eval) — 3-Seed-Bestaetigung des Pareto-Front-Fuehrers enc70_dec90 (Todo #4, Stufe 3).
+# Checkpoint: experiments/kd/ablation/combo/enc70_dec90/target_all/seed_43/best
+# (Architektur wird aus run_config.json neben best/ rekonstruiert — kein Wanda-Rerun.)
+# Run: python src/evaluate.py --config experiments/kd/ablation/combo/eval/enc70_dec90_seed_43/config.yaml
+
+model: conette
+dataset: clotho
+seed: 43
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/combo/enc70_dec90/target_all/seed_43/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

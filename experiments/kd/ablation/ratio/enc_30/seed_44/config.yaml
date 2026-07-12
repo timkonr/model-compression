@@ -1,0 +1,37 @@
+# Pruning-Ratio-Ablation — encoder-only @ 30 %, seed 44.
+# Konfirmatorisches Experiment (Better-than-Baseline-Frage): enc_30 (+0.8 %) und dec_65
+# (+0.7 %, hoechstes Test-FENSE 0.5215) lagen im Seed-42-Screening nominal UEBER Baseline.
+# Diese Zellen wurden POST-HOC ausgewaehlt, weil sie hoch lagen (Winner's-Curse-Risiko!)
+# — daher vorab festgelegtes Kriterium: 3-Seed-Mittel > Baseline um mehr als 2x Seed-Std
+# UND konsistentes Vorzeichen auf FENSE, sonst gilt der Effekt als Rauschen.
+# Config-identisch zu enc_30/seed_42, nur der Seed variiert.
+# Fixiert aus Todo #3: pure_kd, LR 5e-4, 20 Epochen, Val-FENSE-Selektion.
+# Run: mc-train-kd --config experiments/kd/ablation/ratio/enc_30/seed_44/config.yaml
+
+model: conette
+dataset: clotho
+seed: 44
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.3
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: encoder
+  alpha: 0.0
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 5e-4  # Gewinner encoder_kd_lr-Sweep (getunt @60 %)
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/ratio/enc_30/seed_44
+
+data_folder: data/
+model_folder: model/
