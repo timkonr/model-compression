@@ -1,0 +1,27 @@
+# Cross-Domain-Evaluation (SPIDEr/FENSE/METEOR auf AudioCaps-test) — Clotho-distillierte
+# Checkpoints auf der FREMDEN Domaene. Frage (Befund der Erstabgabe, jetzt sauber):
+# holt die Clotho-KD-Recovery Performance auf Kosten von AudioCaps zurueck?
+# dataset: audiocaps schaltet Eval-Set UND Task-Embedding um; der Checkpoint bleibt der
+# Clotho-trainierte. Referenz: Baseline AudioCaps SPIDEr 0.4457 / FENSE 0.6117
+# (experiments/baseline/conette/audiocaps/eval.json).
+# ACHTUNG Interpretation: misst den GESAMTeffekt Pruning (Clotho-kalibriert) + Clotho-KD;
+# die Zerlegung (Pruning-Schaden vs. KD-Forgetting) braucht einen separaten
+# Pruned-only-Eval mit Clotho-Kalibrierung (Code-Aenderung, nur falls Einbruch sichtbar).
+# Checkpoint: experiments/kd/ablation/combo/enc60_dec90/target_all/seed_44/best
+# Run: python src/evaluate.py --config experiments/kd/ablation/cross_domain/eval/enc60_dec90_seed_44/config.yaml
+
+model: conette
+dataset: audiocaps
+seed: 44
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/combo/enc60_dec90/target_all/seed_44/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
