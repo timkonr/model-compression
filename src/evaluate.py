@@ -89,13 +89,14 @@ def _build_clapcap_audio_paths() -> list[str]:
     return paths
 
 
-def load_dataset(verbose, subset):
-    print(f"loading dataset {config.dataset} {subset}")
+def load_dataset(verbose, subset, dataset=None):
+    dataset = dataset or config.dataset
+    print(f"loading dataset {dataset} {subset}")
 
-    if config.dataset == "clotho":
+    if dataset == "clotho":
 
         ds = Clotho(config.data_folder, subset=subset)
-    elif config.dataset == "audiocaps":
+    elif dataset == "audiocaps":
         ds = AudioCaps(
             config.data_folder,
             subset=subset,
@@ -103,7 +104,7 @@ def load_dataset(verbose, subset):
             sr=22050,
         )
     else:
-        raise ValueError(f"Unsupported dataset: {config.dataset}")
+        raise ValueError(f"Unsupported dataset: {dataset}")
 
     if verbose:
         for i in range(len(ds)):
@@ -115,8 +116,8 @@ def load_dataset(verbose, subset):
     return ds
 
 
-def prepare_dataloader(verbose, subset, batch_size=1):
-    ds = load_dataset(verbose, subset)
+def prepare_dataloader(verbose, subset, batch_size=1, dataset=None):
+    ds = load_dataset(verbose, subset, dataset=dataset)
     return DataLoader(ds, batch_size=batch_size, collate_fn=BasicCollate())
 
 
@@ -213,8 +214,15 @@ def perform_inference(verbose):
     calib_audio_paths = None
     if needs_calib:
         if config.baseline_model == "conette":
-            calib_subset = "val" if config.dataset == "audiocaps" else "dev"
-            calib_loader = prepare_dataloader(verbose, subset=calib_subset)
+            # Calibration dataset can differ from the eval dataset (cross-domain
+            # decomposition: reproduce the Clotho-calibrated student, eval on audiocaps).
+            calib_dataset = (
+                getattr(config, "pruning_calibration_dataset", None) or config.dataset
+            )
+            calib_subset = "val" if calib_dataset == "audiocaps" else "dev"
+            calib_loader = prepare_dataloader(
+                verbose, subset=calib_subset, dataset=calib_dataset
+            )
         elif config.baseline_model == "clapcap":
             calib_audio_paths = _build_clapcap_audio_paths()
 

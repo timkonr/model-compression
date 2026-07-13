@@ -1,0 +1,35 @@
+# Pruned-only-Referenz (Cross-Domain-Zerlegung) — enc_60, seed 42, KEIN Training.
+# num_epochs=0: prunt (identischer Student wie im KD-Lauf — gleicher Seed, gleicher
+# Code-Pfad; Reproduzierbarkeit durch die Duplikat-Laeufe belegt), macht den Epoch-(-1)-
+# Eval und speichert den UNRECOVERTEN Studenten nach best/ — evaluierbar via technique: kd.
+# Zweck: Zerlegung des AudioCaps-Einbruchs in Pruning-Schaden (dieser Checkpoint) vs.
+# KD-Forgetting (Differenz zum Clotho-distillierten Checkpoint derselben Zelle).
+# Run: mc-train-kd --config experiments/kd/ablation/cross_domain/pruned_only/enc_60/seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: encoder
+  alpha: 0.0
+  lr: 5e-4
+  lr_encoder: 5e-4
+  num_epochs: 0  # prune-only: kein Training, best/ = initialer geprunter Student
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/cross_domain/pruned_only/enc_60/seed_42
+
+data_folder: data/
+model_folder: model/

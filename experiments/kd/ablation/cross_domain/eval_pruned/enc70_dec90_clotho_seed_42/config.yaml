@@ -1,0 +1,23 @@
+# Pruned-only-Evaluation (clotho-Test) — Cross-Domain-Zerlegung, enc70_dec90, seed 42.
+# Checkpoint = UNRECOVERTER geprunter Student (siehe pruned_only-Trainingsconfig).
+# Vergleichskette pro Zelle und Datensatz: Baseline -> pruned-only -> pruned+KD:
+# der Abstand Baseline->pruned-only ist Pruning-Schaden, pruned-only->pruned+KD ist
+# der KD-Effekt (in-domain: Recovery; cross-domain: Recovery oder Forgetting?).
+# Checkpoint: experiments/kd/ablation/cross_domain/pruned_only/enc70_dec90/seed_42/best
+# Run: python src/evaluate.py --config experiments/kd/ablation/cross_domain/eval_pruned/enc70_dec90_clotho_seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/cross_domain/pruned_only/enc70_dec90/seed_42/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
