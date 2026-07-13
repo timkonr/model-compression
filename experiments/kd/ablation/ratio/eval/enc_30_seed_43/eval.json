@@ -1,0 +1,23 @@
+{
+  "model": "conette",
+  "compression_technique": "kd",
+  "dataset": "clotho",
+  "seed": 43,
+  "model_size_mb": 171.520679,
+  "unquantized_parameters": 41434865,
+  "flops": 86170831872,
+  "device": "cuda:0",
+  "eval_batch_size": 8,
+  "total_inference_time_in_s": "140.499",
+  "latency_ms_per_sample_mean": 102.60609436035156,
+  "latency_ms_per_sample_std": 17.0883731842041,
+  "evaluation_results": {
+    "cider_d": 0.4865155768546036,
+    "spice": 0.13878903258572106,
+    "spider": 0.31265230472016237,
+    "sbert_sim": 0.5183337217669167,
+    "fer": 0.0009569377990430622,
+    "fense": 0.5177219440278255,
+    "meteor": 0.19195811064413584
+  }
+}
