@@ -1,18 +1,25 @@
 # Pruned-only-Evaluation (clotho-Test) — AudioCaps-KALIBRIERTER Student, dec_90, seed 42.
-# Gegenstueck zu eval_pruned/dec_90_clotho_seed_42 (Clotho-kalibriert). 2x2-Vergleich
-# Kalibrierung (clotho/audiocaps) x Test-Set (clotho/audiocaps) prueft die
-# Kalibrierungs-Hypothese: der Schaden folgt den Kalibrierungsdaten.
-# Checkpoint: experiments/kd/ablation/cross_domain/pruned_only_ac_calib/dec_90/seed_42/best
+# Gegenstueck zu eval_pruned/ (Clotho-kalibriert): 2x2 Kalibrierung x Test-Set prueft die Kalibrierungs-Hypothese (der Schaden folgt den Kalibrierungsdaten).
+# technique: pruning -> evaluate.py prunt selbst (deterministisch: Calib-Samples werden
+# unshuffled gezogen; gleiche Kalibrierung => identischer Student ueber beide Test-Sets).
+# Kalibrierungspool: AudioCaps-val (~495 Clips) — nie das Test-Set (kein Leakage). AudioCaps-train ist am
+# Pod nicht verfuegbar; val ersetzt es (Abweichung in der MA dokumentieren).
 # Run: python src/run_all.py --config experiments/kd/ablation/cross_domain/eval_pruned_ac_calib/dec_90_clotho_seed_42/config.yaml
 
 model: conette
 dataset: clotho
 seed: 42
 
-technique: kd
+technique: pruning
 
-kd:
-  model_path: experiments/kd/ablation/cross_domain/pruned_only_ac_calib/dec_90/seed_42/best
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  calibration_dataset: audiocaps
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
 
 metrics: [spider, fense, meteor]
 inference: true

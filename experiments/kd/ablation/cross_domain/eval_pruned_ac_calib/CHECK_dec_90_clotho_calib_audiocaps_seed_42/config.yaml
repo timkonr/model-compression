@@ -1,0 +1,29 @@
+# Pruned-only-Evaluation (audiocaps-Test) — Clotho-KALIBRIERTER Student, dec_90, seed 42.
+# KONSISTENZ-CHECK: repliziert die kd_train-basierten Clotho-kalibrierten Zahlen (clotho 0.2764 / audiocaps 0.2611) ueber den evaluate.py-Pfad. Liegt das Ergebnis nahe dran, ist der Loader-Unterschied (shuffled vs. unshuffled) unerheblich und die 2x2-Matrix nicht konfundiert.
+# technique: pruning -> evaluate.py prunt selbst (deterministisch: Calib-Samples werden
+# unshuffled gezogen; gleiche Kalibrierung => identischer Student ueber beide Test-Sets).
+# Kalibrierungspool: Clotho-dev — nie das Test-Set (kein Leakage). AudioCaps-train ist am
+# Pod nicht verfuegbar; val ersetzt es (Abweichung in der MA dokumentieren).
+# Run: python src/run_all.py --config experiments/kd/ablation/cross_domain/eval_pruned_ac_calib/CHECK_dec_90_clotho_calib_audiocaps_seed_42/config.yaml
+
+model: conette
+dataset: audiocaps
+seed: 42
+
+technique: pruning
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  calibration_dataset: clotho
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
