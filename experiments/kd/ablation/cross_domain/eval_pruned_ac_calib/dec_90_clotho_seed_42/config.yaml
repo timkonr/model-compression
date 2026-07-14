@@ -1,0 +1,22 @@
+# Pruned-only-Evaluation (clotho-Test) — AudioCaps-KALIBRIERTER Student, dec_90, seed 42.
+# Gegenstueck zu eval_pruned/dec_90_clotho_seed_42 (Clotho-kalibriert). 2x2-Vergleich
+# Kalibrierung (clotho/audiocaps) x Test-Set (clotho/audiocaps) prueft die
+# Kalibrierungs-Hypothese: der Schaden folgt den Kalibrierungsdaten.
+# Checkpoint: experiments/kd/ablation/cross_domain/pruned_only_ac_calib/dec_90/seed_42/best
+# Run: python src/run_all.py --config experiments/kd/ablation/cross_domain/eval_pruned_ac_calib/dec_90_clotho_seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/cross_domain/pruned_only_ac_calib/dec_90/seed_42/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
