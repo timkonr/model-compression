@@ -1,0 +1,21 @@
+# Pruned-only-Evaluation (clotho-Test) — enc_70, seed 42, UNQUANTISIERTE Referenz
+# fuer die Quantisierungs-Kette (Dquant = quantisiert minus unquantisiert am selben
+# Checkpoint). Checkpoint = unrecoverter geprunter Student (siehe pruned_only-Config).
+# Checkpoint: experiments/kd/ablation/cross_domain/pruned_only/enc_70/seed_42/best
+# Run: python src/run_all.py --config experiments/kd/ablation/cross_domain/eval_pruned/enc_70_clotho_seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/cross_domain/pruned_only/enc_70/seed_42/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

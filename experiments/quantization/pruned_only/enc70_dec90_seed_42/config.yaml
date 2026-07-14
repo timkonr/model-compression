@@ -1,0 +1,23 @@
+# Quantisierungs-Experiment (INT8 dynamic, weight-only) — pruned-only enc70_dec90 (unrecovert) — isoliert Quantisierung x Pruning ohne KD.
+# Design: Dquant-Kette Baseline -> pruned-only -> pruned+KD, jeweils quantisiert vs.
+# unquantisiert (gepaart am selben Checkpoint). Fragen: (a) stapelt sich Quantisierung
+# verlustfrei auf Pruning+KD? (b) sind recoverte Gewichte (weniger Redundanz)
+# quantisierungsempfindlicher? Zielmetrik: Modellgroesse (FLOPs unveraendert und werden
+# uebersprungen; weight-only-INT8 bringt keinen CPU/T4-Speed — siehe THESIS_REDO-Notiz).
+# Run: python src/run_all.py --config experiments/quantization/pruned_only/enc70_dec90_seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: kd+quantization
+
+kd:
+  model_path: experiments/kd/ablation/cross_domain/pruned_only/enc70_dec90/seed_42/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

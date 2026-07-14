@@ -1,0 +1,23 @@
+# Quantisierungs-Experiment (INT8 dynamic, weight-only) — Pareto-Fuehrer enc@70+dec@90 (pure KD), voller Kompressions-Stack.
+# Design: Dquant-Kette Baseline -> pruned-only -> pruned+KD, jeweils quantisiert vs.
+# unquantisiert (gepaart am selben Checkpoint). Fragen: (a) stapelt sich Quantisierung
+# verlustfrei auf Pruning+KD? (b) sind recoverte Gewichte (weniger Redundanz)
+# quantisierungsempfindlicher? Zielmetrik: Modellgroesse (FLOPs unveraendert und werden
+# uebersprungen; weight-only-INT8 bringt keinen CPU/T4-Speed — siehe THESIS_REDO-Notiz).
+# Run: python src/run_all.py --config experiments/quantization/kd/enc70_dec90_seed_43/config.yaml
+
+model: conette
+dataset: clotho
+seed: 43
+
+technique: kd+quantization
+
+kd:
+  model_path: experiments/kd/ablation/combo/enc70_dec90/target_all/seed_43/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
