@@ -1,0 +1,37 @@
+# Pruned-only-Referenz (Ziehungs-Varianz der Kalibrierung) — dec_90, seed 43,
+# KEIN Training (num_epochs=0). Hintergrund: der Konsistenz-Check zeigte, dass zwei
+# Clotho-kalibrierte Studenten (verschiedene 128-Sample-Ziehungen) in-domain identisch
+# performen (~0.27), cross-domain aber 14 SPIDEr-Punkte auseinanderliegen (0.2611 vs.
+# 0.4020 auf AudioCaps). Diese Laeufe messen die Ziehungs-Varianz unter dem kd_train-
+# Pfad (shuffled, seed-abhaengig): ist -41 % auf AudioCaps typisch oder Ausreisser?
+# Zusatzfrage: liegen pruned-only-AC-Scores mancher Ziehungen UEBER den post-KD-Werten
+# (~0.29) -> Clotho-KD wuerde AudioCaps fuer solche Studenten aktiv verschlechtern.
+# Run: python src/kd/kd_train.py --config experiments/kd/ablation/cross_domain/pruned_only/dec_90/seed_43/config.yaml
+
+model: conette
+dataset: clotho
+seed: 43
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: decoder
+  alpha: 0.0
+  lr: 5e-4
+  lr_encoder: 5e-4
+  num_epochs: 0  # prune-only: kein Training, best/ = initialer geprunter Student
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/cross_domain/pruned_only/dec_90/seed_43
+
+data_folder: data/
+model_folder: model/

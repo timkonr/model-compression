@@ -1,0 +1,21 @@
+# Pruned-only-Evaluation (AudioCaps-Test) — Ziehungs-Varianz, dec_90, seed 43.
+# Siehe pruned_only/dec_90/seed_43/config.yaml: misst, wie stark der Cross-Domain-
+# Schaden von der Kalibrierungs-Ziehung abhaengt (Referenz seed 42: 0.2611 = -41.4 %).
+# Checkpoint: experiments/kd/ablation/cross_domain/pruned_only/dec_90/seed_43/best
+# Run: python src/run_all.py --config experiments/kd/ablation/cross_domain/eval_pruned/dec_90_audiocaps_seed_43/config.yaml
+
+model: conette
+dataset: audiocaps
+seed: 43
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/cross_domain/pruned_only/dec_90/seed_43/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
