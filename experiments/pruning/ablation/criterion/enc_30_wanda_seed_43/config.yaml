@@ -1,0 +1,29 @@
+# Importance-criterion ablation (enc_30, wanda, seed 43) -- pruned-only, kein Training.
+# Berichtete Ablation auf dem Clotho-Test-Split (gleiche Konvention wie Loss-/Ratio-
+# Ablation: Test-SPIDEr primaer, 1 Eval pro Konfiguration).
+# Kalibrierung (nur wanda): 128 Batches aus Clotho-dev, shuffled => seed-abhaengiger Draw.
+# random: seed-abhaengig ueber globalen Torch-Seed. sum_l2: deterministisch (1 Lauf).
+# Run: python src/run_all.py --config experiments/pruning/ablation/criterion/enc_30_wanda_seed_43/config.yaml
+
+model: conette
+dataset: clotho
+seed: 43
+
+technique: pruning
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  calibration_dataset: clotho
+  calibration_shuffle: true
+  global_pruning_ratio: 0.3
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

@@ -35,6 +35,7 @@ pruning = False  # Inference on pruned model
 pruning_score_mode = "sum_l2"  # wanda (consider weights and activations) | sum_l2 (consider in and out strength) | first_l2 (consider only in strength)
 num_calibration_batches = 128  # Number of batches to use for collecting activation stats for pruning (only for wanda score mode)
 pruning_calibration_dataset = None  # Calibration data for wanda scoring; None = same as `dataset`. Set to e.g. "clotho" to reproduce a Clotho-calibrated student while evaluating on audiocaps (cross-domain decomposition)
+pruning_calibration_shuffle = False  # True: draw calibration batches shuffled with the run seed (seed-dependent draw, as in kd_train). False: deterministic unshuffled draw (reproduces existing cross-domain students)
 ### conette
 decoder_pruning_ratio = None
 convnext_3072_threshold = 0.075
@@ -175,6 +176,8 @@ def load_from_yaml(path: str) -> None:
         g["pruning_score_mode"] = pruning_cfg["score_mode"]
     if "calibration_dataset" in pruning_cfg:
         g["pruning_calibration_dataset"] = pruning_cfg["calibration_dataset"]
+    if "calibration_shuffle" in pruning_cfg:
+        g["pruning_calibration_shuffle"] = pruning_cfg["calibration_shuffle"]
     for key in (
         "decoder_pruning_ratio",
         "convnext_3072_threshold",

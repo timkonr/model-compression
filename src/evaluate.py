@@ -116,9 +116,19 @@ def load_dataset(verbose, subset, dataset=None):
     return ds
 
 
-def prepare_dataloader(verbose, subset, batch_size=1, dataset=None):
+def prepare_dataloader(verbose, subset, batch_size=1, dataset=None, shuffle=False):
     ds = load_dataset(verbose, subset, dataset=dataset)
-    return DataLoader(ds, batch_size=batch_size, collate_fn=BasicCollate())
+    generator = None
+    if shuffle:
+        # Seed-dependent draw: same run seed => same calibration batches.
+        generator = torch.Generator().manual_seed(config.seed)
+    return DataLoader(
+        ds,
+        batch_size=batch_size,
+        collate_fn=BasicCollate(),
+        shuffle=shuffle,
+        generator=generator,
+    )
 
 
 def inference(model: torch.nn.Module, data_loader):
@@ -221,7 +231,10 @@ def perform_inference(verbose):
             )
             calib_subset = "val" if calib_dataset == "audiocaps" else "dev"
             calib_loader = prepare_dataloader(
-                verbose, subset=calib_subset, dataset=calib_dataset
+                verbose,
+                subset=calib_subset,
+                dataset=calib_dataset,
+                shuffle=getattr(config, "pruning_calibration_shuffle", False),
             )
         elif config.baseline_model == "clapcap":
             calib_audio_paths = _build_clapcap_audio_paths()
@@ -317,6 +330,13 @@ def perform_inference(verbose):
                 "global_pruning_ratio": getattr(config, "global_pruning_ratio", None),
                 "score_mode": config.pruning_score_mode,
                 "num_calibration_batches": config.num_calibration_batches,
+                "calibration_dataset": getattr(
+                    config, "pruning_calibration_dataset", None
+                )
+                or config.dataset,
+                "calibration_shuffle": getattr(
+                    config, "pruning_calibration_shuffle", False
+                ),
             }
         elif config.baseline_model == "clapcap":
             metadata["pruning_setup"] = {

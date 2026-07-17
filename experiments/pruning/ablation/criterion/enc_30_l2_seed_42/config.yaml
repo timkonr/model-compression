@@ -1,0 +1,26 @@
+# Importance-criterion ablation (enc_30, l2, seed 42) -- pruned-only, kein Training.
+# Berichtete Ablation auf dem Clotho-Test-Split (gleiche Konvention wie Loss-/Ratio-
+# Ablation: Test-SPIDEr primaer, 1 Eval pro Konfiguration).
+# Kalibrierung (nur wanda): 128 Batches aus Clotho-dev, shuffled => seed-abhaengiger Draw.
+# random: seed-abhaengig ueber globalen Torch-Seed. sum_l2: deterministisch (1 Lauf).
+# Run: python src/run_all.py --config experiments/pruning/ablation/criterion/enc_30_l2_seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: pruning
+
+pruning:
+  score_mode: sum_l2
+  global_pruning_ratio: 0.3
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
