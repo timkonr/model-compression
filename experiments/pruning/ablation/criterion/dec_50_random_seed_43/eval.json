@@ -1,0 +1,33 @@
+{
+  "model": "conette",
+  "compression_technique": "pruning",
+  "dataset": "clotho",
+  "seed": 43,
+  "model_size_mb": 190.009383,
+  "unquantized_parameters": 46057051,
+  "flops": 92777688268,
+  "device": "cuda:0",
+  "eval_batch_size": 8,
+  "total_inference_time_in_s": "145.187",
+  "latency_ms_per_sample_mean": 105.57892608642578,
+  "latency_ms_per_sample_std": 18.83180046081543,
+  "pruning_setup": {
+    "decoder_pruning_ratio": 0.5,
+    "convnext_3072_threshold": null,
+    "convnext_1536_threshold": null,
+    "global_pruning_ratio": null,
+    "score_mode": "random",
+    "num_calibration_batches": 128,
+    "calibration_dataset": "clotho",
+    "calibration_shuffle": false
+  },
+  "evaluation_results": {
+    "cider_d": 0.46767877908158256,
+    "spice": 0.12976784323278728,
+    "spider": 0.2987233111571849,
+    "sbert_sim": 0.5170341032231895,
+    "fer": 0.0019138755980861245,
+    "fense": 0.5162528470402771,
+    "meteor": 0.1865951953199999
+  }
+}
