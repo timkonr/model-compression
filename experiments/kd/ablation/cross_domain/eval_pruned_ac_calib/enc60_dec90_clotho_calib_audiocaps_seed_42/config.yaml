@@ -1,0 +1,30 @@
+# Pruned-only-Evaluation (audiocaps-Test) — Clotho-KALIBRIERTER Student, enc60_dec90, seed 42.
+# Schliesst die 2x2-Matrix (bisher nur dec_90 vollstaendig): fehlender Clotho-
+# kalibrierter Punkt ueber den evaluate.py-Pfad, Gegenstueck zu
+# enc60_dec90_audiocaps_seed_42 (AudioCaps-kalibriert) in diesem Ordner.
+# technique: pruning -> evaluate.py prunt selbst (deterministisch: Calib-Samples werden
+# unshuffled gezogen; gleiche Kalibrierung => identischer Student ueber beide Test-Sets).
+# Kalibrierungspool: Clotho-dev — nie das Test-Set (kein Leakage).
+# Run: python src/run_all.py --config experiments/kd/ablation/cross_domain/eval_pruned_ac_calib/enc60_dec90_clotho_calib_audiocaps_seed_42/config.yaml
+
+model: conette
+dataset: audiocaps
+seed: 42
+
+technique: pruning
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  calibration_dataset: clotho
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
