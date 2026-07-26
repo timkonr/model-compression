@@ -1,0 +1,31 @@
+# Kalibrierungsquellen-Ablation (enc_60, clotho-kalibriert, Test audiocaps, seed 43).
+# Redo von t6 (Kalibrierungs-2x2) mit echter Seed-zu-Seed-Streuung statt einer
+# einzelnen deterministischen Ziehung: calibration_shuffle=true macht den Draw
+# seed-abhaengig (ohne Shuffle wuerden alle Seeds dieselben 128 Kalib-Samples
+# ziehen -- der Seed haette dann keinen Effekt). Pruned-only, kein Training.
+# Kalibrierungspool: Clotho-dev bzw. AudioCaps-val (~495 Clips, train nicht
+# verfuegbar). enc70_dec90 bewusst ausgeschlossen.
+# Run: python src/run_all.py --config experiments/pruning/ablation/calibration/enc_60_clothocalib_audiocaps_seed_43/config.yaml
+
+model: conette
+dataset: audiocaps
+seed: 43
+
+technique: pruning
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  calibration_dataset: clotho
+  calibration_shuffle: true
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
