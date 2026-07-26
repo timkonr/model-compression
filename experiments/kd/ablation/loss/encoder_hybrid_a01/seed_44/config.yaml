@@ -1,0 +1,43 @@
+# KLD-vs-CE Loss-Ablation (Todo #3, Phase B, Nachtrag) — encoder-only 60%, hybrid alpha=0.1, seed 44.
+# Ergaenzt encoder_hybrid_a01 auf 3 Seeds: Der Seed-42-Punkt existiert bereits als
+# experiments/kd/sweep/encoder_hybrid_lr/lr_5e-4_a01 (Val-FENSE 0.5089) und wird direkt
+# als Seed-42-Ablationslauf wiederverwendet (identische Bedingungen, keine Wiederholung).
+# Grund fuer den Nachtrag: Im Single-Seed-Screening lag alpha=0.1@5e-4 (0.5089) nur 0.0014
+# hinter dem gewaehlten alpha=0.5@1e-3 (0.5103) — ein Abstand in der Groessenordnung der
+# sonst beobachteten Seed-Streuung (+-0.001-0.003). Erst mit echten 3 Seeds laesst sich
+# sagen, ob dieser Vorsprung robust ist oder im Rauschen verschwindet.
+# LR=5e-4 uebernommen von pure_kd (nicht neu gesweept): bei alpha=0.1 ist der Loss
+# gradientenmaessig ~10:1 KD-dominiert (siehe Kommentar in lr_5e-4_a01/config.yaml),
+# die LR gehoert daher dorthin, nicht zum CE-lastigeren alpha=0.5-Bracket (1e-3).
+# Achse: Loss (mode/alpha) x Komponente x 3 Seeds, jeder Loss an seiner EIGENEN
+# Gewinner-LR. Vergleich NUR auf Val-FENSE der Best-Checkpoints, nicht auf val_loss.
+# Gleicher Seed = identisch geprunter Student -> Vergleiche innerhalb eines Seeds gepaart.
+# Run: mc-train-kd --config experiments/kd/ablation/loss/encoder_hybrid_a01/seed_44/config.yaml
+
+model: conette
+dataset: clotho
+seed: 44
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: hybrid
+  train_components: encoder
+  alpha: 0.1
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 5e-4
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # volle 20 Epochen, einheitliches Budget vermeidet Selektionsbias
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/loss/encoder_hybrid_a01/seed_44
+
+data_folder: data/
+model_folder: model/
