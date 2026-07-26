@@ -1,0 +1,33 @@
+{
+  "model": "conette",
+  "compression_technique": "pruning",
+  "dataset": "audiocaps",
+  "seed": 43,
+  "model_size_mb": 117.736295,
+  "unquantized_parameters": 27988649,
+  "flops": 34705274956,
+  "device": "cuda:0",
+  "eval_batch_size": 8,
+  "total_inference_time_in_s": "90.577",
+  "latency_ms_per_sample_mean": 66.69229125976562,
+  "latency_ms_per_sample_std": 9.674553871154785,
+  "pruning_setup": {
+    "decoder_pruning_ratio": 0.9,
+    "convnext_3072_threshold": null,
+    "convnext_1536_threshold": null,
+    "global_pruning_ratio": 0.6,
+    "score_mode": "wanda",
+    "num_calibration_batches": 128,
+    "calibration_dataset": "audiocaps",
+    "calibration_shuffle": true
+  },
+  "evaluation_results": {
+    "cider_d": 0.5446130502086568,
+    "spice": 0.1262246966294058,
+    "spider": 0.3354188734190313,
+    "sbert_sim": 0.5284026067188153,
+    "fer": 0.04717948717948718,
+    "fense": 0.5055100503265858,
+    "meteor": 0.19279632308641914
+  }
+}
