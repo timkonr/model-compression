@@ -1,0 +1,34 @@
+# Importance-criterion ablation (dec_80, wanda, seed 44) -- pruned-only, kein Training.
+# Nachtrag: schliesst die Luecke im Decoder-Ratio-Set (bisher nur 50/70/90) genau am
+# Referenzpunkt (80%), der fuer LR-Sweep, Loss-Ablation und alle Ratio-/Kombi-Experimente
+# als fixer Decoder-Anker verwendet wurde. Liefert damit die Evidenz fuer "80% erzeugt
+# messbaren, aber recoverbaren Schaden" aus der Redo-Kampagne selbst, statt aus der
+# Vorgaenger-Kampagne (siehe Chat-Diskussion "wo kommen die 80% her").
+# Berichtete Ablation auf dem Clotho-Test-Split (gleiche Konvention wie Loss-/Ratio-
+# Ablation: Test-SPIDEr primaer, 1 Eval pro Konfiguration).
+# Kalibrierung (nur wanda): 128 Batches aus Clotho-dev, shuffled => seed-abhaengiger Draw.
+# random: seed-abhaengig ueber globalen Torch-Seed. sum_l2: deterministisch (1 Lauf).
+# Run: python src/run_all.py --config experiments/pruning/ablation/criterion/dec_80_wanda_seed_44/config.yaml
+
+model: conette
+dataset: clotho
+seed: 44
+
+technique: pruning
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  calibration_dataset: clotho
+  calibration_shuffle: true
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.8
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
