@@ -7,14 +7,17 @@
   "unquantized_parameters": 49208923,
   "flops": 94377572352,
   "device": "cuda:0",
-  "inference_time_in_s": "159.289",
+  "eval_batch_size": 8,
+  "total_inference_time_in_s": "127.230",
+  "latency_ms_per_sample_mean": 103.63057708740234,
+  "latency_ms_per_sample_std": 16.212139129638672,
   "evaluation_results": {
-    "cider_d": 0.48179592684369854,
-    "spice": 0.1375628163326971,
-    "spider": 0.3096793715881978,
-    "sbert_sim": 0.5178245079324861,
-    "fer": 0.0009569377990430622,
-    "fense": 0.5172127302447289,
-    "meteor": 0.19199394632448302
+    "cider_d": 0.4805825826082592,
+    "spice": 0.13770655015851235,
+    "spider": 0.3091445663833858,
+    "sbert_sim": 0.5174544610564361,
+    "fer": 0.0019138755980861245,
+    "fense": 0.5163359516121127,
+    "meteor": 0.1913754351376352
   }
 }
