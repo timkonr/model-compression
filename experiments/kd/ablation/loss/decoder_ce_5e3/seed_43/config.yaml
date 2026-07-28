@@ -1,0 +1,42 @@
+# KLD-vs-CE Loss-Ablation (Todo #3, Phase B, Nachtrag) — decoder-only 80%, pure CE, LR=5e-3, seed 43.
+# Ergaenzt decoder_ce_5e3 auf 3 Seeds: Der Seed-42-Punkt existiert bereits als
+# experiments/kd/sweep/decoder_ce_lr/lr_5e-3 (Val-FENSE 0.5045) und wird direkt als
+# Seed-42-Ablationslauf wiederverwendet (identische Bedingungen, keine Wiederholung).
+# Grund fuer den Nachtrag: Der bisherige Gewinner (1e-3, 0.5036) war NICHT das Maximum
+# des eigenen Sweeps -- 5e-3 lag mit 0.5045 hoeher. Begruendung im bisherigen
+# decoder_ce/seed_43/config.yaml: "Plateau 5e-4..5e-3, Spannweite 0.0013 unter Rauschband
+# -> mittlerer, beidseitig eingerahmter Punkt statt Grid-Rand" -- eine plausible, aber nie
+# mit echten Seeds bei 5e-3 selbst ueberprüfte Annahme. Dieser Nachtrag testet direkt,
+# ob der Grid-Rand (5e-3) trotz der Rand-Vorsicht robust besser ist oder ob sich die
+# Plateau-Interior-Logik (1e-3) bestaetigt.
+# Achse: Loss (mode/alpha) x Komponente x 3 Seeds, jeder Loss an seiner EIGENEN
+# Gewinner-LR-Kandidatur. Vergleich NUR auf Val-FENSE der Best-Checkpoints, nicht auf
+# val_loss. Gleicher Seed = identisch geprunter Student -> Vergleiche gepaart.
+# Run: mc-train-kd --config experiments/kd/ablation/loss/decoder_ce_5e3/seed_43/config.yaml
+
+model: conette
+dataset: clotho
+seed: 43
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.8
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: encoder_ce
+  train_components: decoder
+  lr: 5e-3
+  lr_encoder: 1.0e-6  # unused (encoder frozen)
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # volle 20 Epochen, einheitliches Budget vermeidet Selektionsbias
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/loss/decoder_ce_5e3/seed_43
+
+data_folder: data/
+model_folder: model/
