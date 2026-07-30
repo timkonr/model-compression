@@ -1,0 +1,39 @@
+# Loss-LR-Screen fuer die geplante KLD-vs-Hybrid-n=7-Serie auf dem kombiniert
+# geprunten Modell (Enc70% + Dec90%, target=all) — Nachtrag.
+# Grund: die bisherige target_all/seed_42-Konfiguration (lr=lr_encoder=5e-4) uebernimmt
+# die Encoder-LR unveraendert vom Enc60%-only-Sweep (LR-Transfer-Annahme, s. Kommentar
+# in .../target_all/seed_42/config.yaml). Bevor wir Seeds in die finale n=7-Serie
+# investieren, pruefen wir hier, ob eine hoehere Encoder-LR an diesem aggressiveren,
+# kombinierten Punkt (Enc70% statt Enc60%, beide Komponenten gleichzeitig trainiert)
+# tatsaechlich besser ist. Referenzwert (lr_encoder=5e-4, seed 42): Val-FENSE 0.5006.
+# Decoder-LR bleibt bei 5e-4 fix (am Decoder unstrittig, sauber gebrackt).
+# WICHTIG: Vergleich auf bestem Val-FENSE, nie auf val_loss und nie auf test.
+# Run: mc-train-kd --config experiments/kd/ablation/combo/enc70_dec90/loss_lr_screen/kld_lrenc1e-3/seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.7
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: all
+  alpha: 0.0
+  lr: 5e-4
+  lr_encoder: 1e-3
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/combo/enc70_dec90/loss_lr_screen/kld_lrenc1e-3/seed_42
+
+data_folder: data/
+model_folder: model/
