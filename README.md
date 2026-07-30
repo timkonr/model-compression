@@ -27,19 +27,26 @@ git clone https://github.com/timkonr/model-compression.git
 cd model-compression
 ```
 
-Afterwards you need to create an environment that contains **python>=3.12** and **pip**. You can use venv, conda, micromamba or some other python environment tool.
+Afterwards you need to create an environment that contains **python>=3.10** and **pip**. You can use venv, conda, micromamba or some other python environment tool.
 
 Here is an example using [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html):
 
 ```bash
-conda create -n model_compression python=3.12.7
+conda create -n model_compression python=3.10.12
 conda activate model_compression
 ```
 
-Then, you can install the required packages for this repository:
+Then, you need to install the required packages for this repository. You need to select the proper requirements file, depending on whether CUDA is available:
 
 ```bash
+# CUDA is available
 pip install -r requirements.txt -c constraints.txt
+pip install -e .
+```
+
+```bash
+# CUDA is not available
+pip install -r requirements-cpu.txt
 pip install -e .
 ```
 
@@ -67,42 +74,26 @@ aac-metrics-download
 
 ## Usage
 
+### Distillation
+
+```bash
+mc-train-kd --config experiments/example/config.yaml
+```
+
+The teacher is always the unpruned baseline loaded from `model/baseline/`.
+
+### Evaluation
+
 Experiments are configured via YAML files in `experiments/`. No manual code editing required.
 
 `mc-run` accepts any YAML — it auto-detects whether it describes a single experiment or a full matrix:
 
 ```bash
-mc-run --config experiments/example_single.yaml        # single experiment
-mc-run --config experiments/full_matrix.yaml           # full matrix
-mc-run --config experiments/smoke_test.yaml            # smoke test (one per technique)
-mc-run --config experiments/full_matrix.yaml --dry-run # preview without running
+mc-run --config experiments/example/config.yaml           # single experiment
+mc-run --config experiments/example/config.yaml --dry-run # preview without running
 ```
 
-In matrix mode, each experiment runs in its own subprocess so memory is fully released between runs.
+Each experiment saves two JSON files within the same folder:
 
-Edit `experiments/example_single.yaml` to configure an experiment. The available techniques are:
-
-| `technique` value | Description |
-|---|---|
-| `none` | Uncompressed baseline |
-| `quantization` | Dynamic INT8 quantization |
-| `pruning` | Structured pruning (L2-norm or random) |
-| `kd` | Load a KD-trained student model |
-| `pruning+quantization` | Pruning followed by quantization |
-
-### Train a KD student model
-
-After pruning, a student model can be recovered via knowledge distillation:
-
-```bash
-mc-train-kd --student-path checkpoints/pruned/ --dataset audiocaps --epochs 10
-```
-
-The teacher is always the unpruned baseline loaded from `model/baseline/`.
-
-### Results
-
-Each experiment saves two JSON files to `results/`:
-
-- `inference_results_{technique}_{timestamp}.json` — generated captions, references, model size, inference time, pruning config
-- `eval_results_{device}_{technique}_{timestamp}.json` — metric scores (SPIDEr, FENSE, METEOR) plus all metadata
+- `inference.json` — includes the generated captions and metadata
+- `eval.json` — includes evaluation results (SPIDEr, FENSE) plus all metadata
