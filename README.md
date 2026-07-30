@@ -46,7 +46,7 @@ pip install -e .
 
 ```bash
 # CUDA is not available
-pip install -r requirements-cpu.txt
+pip install -r requirements-cpu.txt -c constraints.txt
 pip install -e .
 ```
 
