@@ -16,14 +16,14 @@ def make_quantized_model(model: torch.nn.Module, dtype=torch.qint8) -> torch.nn.
     total_params = get_model_params(m)
 
     if config.baseline_model == "conette":
-        if torch.cuda.is_available():
-            quantize_(m, Int8WeightOnlyConfig())
-            m = torch.compile(m, mode="max-autotune", fullgraph=True, dynamic=True)
-        else:
-            m.cpu()
-            m = torch.quantization.quantize_dynamic(
-                m, {torch.nn.Linear}, dtype=dtype, inplace=True
-            )
+        #if torch.cuda.is_available():
+        quantize_(m, Int8WeightOnlyConfig())
+        m = torch.compile(m, mode="max-autotune", fullgraph=True, dynamic=True)
+        # else:
+        #     m.cpu()
+        #     m = torch.quantization.quantize_dynamic(
+        #         m, {torch.nn.Linear}, dtype=dtype, inplace=True
+        #     )
     elif config.baseline_model == "clapcap":
         # for clapcap we only quantize the encoder (m.clap) and the CLAP projection (m.clap_project)
         if torch.cuda.is_available():
