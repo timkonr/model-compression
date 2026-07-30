@@ -1,0 +1,38 @@
+# Alpha-Mini-Validierung fuer den KLD-vs-Hybrid-Vergleich auf dem finalen Kombi-Modell
+# (Enc70%+Dec90%, target=all) — Nachtrag zu seed_42.
+# Grund: seed_42 allein zeigte alpha=0.5@lr_encoder=1e-3 (0.5028) knapp vor
+# alpha=0.1@lr_encoder=5e-4 (0.5020) -- ein winziger Abstand (0.0008), der bei n=1
+# nicht belastbar ist und dem sonstigen Kampagnen-Muster widerspricht (alpha=0.1
+# gewinnt am Decoder klar, ist am Encoder bei n=3 statistisch gleichauf mit alpha=0.5,
+# nie schlechter). Zwei weitere Seeds bringen beide Kandidaten auf n=3, bevor die
+# finale n=7-Serie auf den tatsaechlichen Gewinner festgelegt wird.
+# WICHTIG: Vergleich auf bestem Val-FENSE, nie auf val_loss und nie auf test.
+# Run: mc-train-kd --config experiments/kd/ablation/combo/enc70_dec90/loss_lr_screen/hybrid_a05/seed_44/config.yaml
+
+model: conette
+dataset: clotho
+seed: 44
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.7
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: hybrid
+  train_components: all
+  alpha: 0.5
+  lr: 5e-4
+  lr_encoder: 1e-3
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/combo/enc70_dec90/loss_lr_screen/hybrid_a05/seed_44
+
+data_folder: data/
+model_folder: model/
