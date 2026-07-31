@@ -1,0 +1,21 @@
+# Pruned-only-Evaluation (AudioCaps-Test) — Cross-Domain-Zerlegung, enc70_dec90, seed 44.
+# Nachtrag zu seed_42, bringt gen_decomposition.tex fuer enc70_dec90/AudioCaps auf n=3
+# (das finale, in der restlichen Arbeit als Pareto-Leader hervorgehobene Modell).
+# Checkpoint: experiments/kd/ablation/cross_domain/pruned_only/enc70_dec90/seed_44/best
+# Run: python src/evaluate.py --config experiments/kd/ablation/cross_domain/eval_pruned/enc70_dec90_audiocaps_seed_44/config.yaml
+
+model: conette
+dataset: audiocaps
+seed: 44
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/cross_domain/pruned_only/enc70_dec90/seed_44/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

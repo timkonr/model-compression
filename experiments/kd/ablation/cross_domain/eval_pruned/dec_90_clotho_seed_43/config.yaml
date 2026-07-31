@@ -1,0 +1,21 @@
+# Pruned-only-Evaluation (Clotho-Test) — Cross-Domain-Zerlegung, dec_90, seed 43.
+# Nachtrag zu seed_42, bringt gen_decomposition.tex fuer dec_90/Clotho auf n=3.
+# Der Checkpoint existiert bereits (aus der AudioCaps-Ziehungs-Varianz-Serie).
+# Checkpoint: experiments/kd/ablation/cross_domain/pruned_only/dec_90/seed_43/best
+# Run: python src/evaluate.py --config experiments/kd/ablation/cross_domain/eval_pruned/dec_90_clotho_seed_43/config.yaml
+
+model: conette
+dataset: clotho
+seed: 43
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/cross_domain/pruned_only/dec_90/seed_43/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

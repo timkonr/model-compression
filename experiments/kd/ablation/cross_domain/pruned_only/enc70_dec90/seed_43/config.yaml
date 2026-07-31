@@ -1,0 +1,35 @@
+# Pruned-only-Referenz (Cross-Domain-Zerlegung) — enc70_dec90, seed 43, KEIN Training.
+# Nachtrag zu seed_42: bringt die Decomposition-Tabelle (gen_decomposition.tex) auf
+# n=3 fuer enc70_dec90 (das finale, in der restlichen Arbeit als Pareto-Leader
+# hervorgehobene Modell), konsistent zu dec_90/enc60_dec90.
+# num_epochs=0: prunt, macht den Epoch-(-1)-Eval und speichert den UNRECOVERTEN
+# Studenten nach best/ — evaluierbar via technique: kd. Config-identisch zu seed_42.
+# Run: mc-train-kd --config experiments/kd/ablation/cross_domain/pruned_only/enc70_dec90/seed_43/config.yaml
+
+model: conette
+dataset: clotho
+seed: 43
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.7
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: all
+  alpha: 0.0
+  lr: 5e-4
+  lr_encoder: 5e-4
+  num_epochs: 0  # prune-only: kein Training, best/ = initialer geprunter Student
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/cross_domain/pruned_only/enc70_dec90/seed_43
+
+data_folder: data/
+model_folder: model/
