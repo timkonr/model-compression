@@ -5,12 +5,12 @@
   "seed": 44,
   "model_size_mb": 179.923815,
   "unquantized_parameters": 43535656,
-  "flops": 92484091596,
+  "flops": 91707644620,
   "device": "cuda:0",
   "eval_batch_size": 8,
-  "total_inference_time_in_s": "119.464",
-  "latency_ms_per_sample_mean": 108.75431060791016,
-  "latency_ms_per_sample_std": 16.931591033935547,
+  "total_inference_time_in_s": "152.172",
+  "latency_ms_per_sample_mean": 114.87960052490234,
+  "latency_ms_per_sample_std": 16.4599552154541,
   "pruning_setup": {
     "decoder_pruning_ratio": 0.9,
     "convnext_3072_threshold": null,
@@ -22,12 +22,12 @@
     "calibration_shuffle": true
   },
   "evaluation_results": {
-    "cider_d": 0.4091639259529598,
-    "spice": 0.11986838630539152,
-    "spider": 0.2645161561291757,
-    "sbert_sim": 0.5169089410632278,
-    "fer": 0.07559808612440191,
-    "fense": 0.4852615334560569,
-    "meteor": 0.17150933278750402
+    "cider_d": 0.39146857998326157,
+    "spice": 0.1148864022687039,
+    "spider": 0.25317749112598276,
+    "sbert_sim": 0.5123214215557114,
+    "fer": 0.05645933014354067,
+    "fense": 0.48711703385498245,
+    "meteor": 0.1689988558989132
   }
 }

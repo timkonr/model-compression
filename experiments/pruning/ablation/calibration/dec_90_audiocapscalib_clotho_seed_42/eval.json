@@ -3,14 +3,14 @@
   "compression_technique": "pruning",
   "dataset": "clotho",
   "seed": 42,
-  "model_size_mb": 179.923751,
+  "model_size_mb": 179.923879,
   "unquantized_parameters": 43535656,
-  "flops": 92509474816,
+  "flops": 91461636812,
   "device": "cuda:0",
   "eval_batch_size": 8,
-  "total_inference_time_in_s": "119.416",
-  "latency_ms_per_sample_mean": 102.2166748046875,
-  "latency_ms_per_sample_std": 13.659893989562988,
+  "total_inference_time_in_s": "158.773",
+  "latency_ms_per_sample_mean": 133.69915771484375,
+  "latency_ms_per_sample_std": 21.652202606201172,
   "pruning_setup": {
     "decoder_pruning_ratio": 0.9,
     "convnext_3072_threshold": null,
@@ -22,12 +22,12 @@
     "calibration_shuffle": true
   },
   "evaluation_results": {
-    "cider_d": 0.411153697990913,
-    "spice": 0.12305865290649293,
-    "spider": 0.26710617544870296,
-    "sbert_sim": 0.5137752643113501,
-    "fer": 0.08133971291866028,
-    "fense": 0.48086097698605224,
-    "meteor": 0.17438473473303787
+    "cider_d": 0.3830325631871984,
+    "spice": 0.11623254996321998,
+    "spider": 0.2496325565752092,
+    "sbert_sim": 0.5098322753879156,
+    "fer": 0.04880382775119617,
+    "fense": 0.48891931348796663,
+    "meteor": 0.1689854632524322
   }
 }
