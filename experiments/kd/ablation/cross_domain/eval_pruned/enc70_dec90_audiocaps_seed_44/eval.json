@@ -1,0 +1,23 @@
+{
+  "model": "conette",
+  "compression_technique": "kd",
+  "dataset": "audiocaps",
+  "seed": 44,
+  "model_size_mb": 107.375975,
+  "unquantized_parameters": 25398622,
+  "flops": 28932093209,
+  "device": "cuda:0",
+  "eval_batch_size": 8,
+  "total_inference_time_in_s": "80.657",
+  "latency_ms_per_sample_mean": 41.396087646484375,
+  "latency_ms_per_sample_std": 5.033449172973633,
+  "evaluation_results": {
+    "cider_d": 0.15327596791955778,
+    "spice": 0.0422899639825258,
+    "spider": 0.09778296595104179,
+    "sbert_sim": 0.2850228848079076,
+    "fer": 0.5066666666666667,
+    "fense": 0.20292493245979912,
+    "meteor": 0.10100984492609867
+  }
+}
