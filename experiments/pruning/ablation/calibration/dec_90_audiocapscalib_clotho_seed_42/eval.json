@@ -8,9 +8,9 @@
   "flops": 91461636812,
   "device": "cuda:0",
   "eval_batch_size": 8,
-  "total_inference_time_in_s": "158.773",
-  "latency_ms_per_sample_mean": 133.69915771484375,
-  "latency_ms_per_sample_std": 21.652202606201172,
+  "total_inference_time_in_s": "134.232",
+  "latency_ms_per_sample_mean": 109.9932861328125,
+  "latency_ms_per_sample_std": 15.876230239868164,
   "pruning_setup": {
     "decoder_pruning_ratio": 0.9,
     "convnext_3072_threshold": null,

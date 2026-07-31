@@ -8,9 +8,9 @@
   "flops": 91461636812,
   "device": "cuda:0",
   "eval_batch_size": 8,
-  "total_inference_time_in_s": "158.773",
-  "latency_ms_per_sample_mean": 133.69915771484375,
-  "latency_ms_per_sample_std": 21.652202606201172,
+  "total_inference_time_in_s": "134.232",
+  "latency_ms_per_sample_mean": 109.9932861328125,
+  "latency_ms_per_sample_std": 15.876230239868164,
   "predictions": [
     "a machine is being used and a person is in the background",
     "a radio is playing with a man speaking in the background",
