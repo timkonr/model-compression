@@ -1,0 +1,23 @@
+# Finale Test-Evaluation (Clotho-eval) fuer die Hybrid-Alpha=0.5-Alternative zum
+# KLD-Hauptmodell (Enc70%+Dec90%, target=all). Grund: die n=3/n=7-Mini-Validierung
+# zeigte Hybrid(a=0.5, lr_encoder=1e-3) konsistent vor KLD auf Val-FENSE (3/3 Seeds,
+# siehe loss_lr_screen/hybrid_a05). Diese Evaluation liefert die zitierfaehigen
+# Test-Zahlen fuer den direkten Vergleich mit der bestehenden KLD-Zeile.
+# Checkpoint: experiments/kd/ablation/combo/enc70_dec90/loss_lr_screen/hybrid_a05/seed_42/best
+# Run: python src/evaluate.py --config experiments/kd/ablation/combo/eval/enc70_dec90_hybrid_a05_seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/combo/enc70_dec90/loss_lr_screen/hybrid_a05/seed_42/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

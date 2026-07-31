@@ -1,0 +1,20 @@
+# Cross-Domain-Evaluation (AudioCaps-test) fuer die Hybrid-Alpha=0.5-Alternative zum
+# KLD-Hauptmodell (Enc70%+Dec90%, target=all, Clotho-distilliert).
+# Checkpoint: experiments/kd/ablation/combo/enc70_dec90/loss_lr_screen/hybrid_a05/seed_43/best
+# Run: python src/evaluate.py --config experiments/kd/ablation/cross_domain/eval/enc70_dec90_hybrid_a05_seed_43/config.yaml
+
+model: conette
+dataset: audiocaps
+seed: 43
+
+technique: kd
+
+kd:
+  model_path: experiments/kd/ablation/combo/enc70_dec90/loss_lr_screen/hybrid_a05/seed_43/best
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
