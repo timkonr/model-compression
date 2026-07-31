@@ -555,11 +555,12 @@ def prune_conette(
                 num_batches=num_calibration_batches,
             )
         if decoder_pruning_ratio is not None:
+            calib_dataset_name = getattr(config, "pruning_calibration_dataset", None) or config.dataset
             decoder_activation_scores = collect_conette_decoder_activation_scores(
                 model,
                 loader=loader,
                 num_batches=num_calibration_batches,
-                dataset_name=config.dataset,
+                dataset_name=calib_dataset_name,
             )
 
     # -------------------------
