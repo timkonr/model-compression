@@ -3,14 +3,14 @@
   "compression_technique": "pruning",
   "dataset": "audiocaps",
   "seed": 43,
-  "model_size_mb": 117.737383,
+  "model_size_mb": 117.737511,
   "unquantized_parameters": 27988911,
-  "flops": 34016424320,
+  "flops": 32445314841,
   "device": "cuda:0",
   "eval_batch_size": 8,
-  "total_inference_time_in_s": "81.760",
-  "latency_ms_per_sample_mean": 66.47846984863281,
-  "latency_ms_per_sample_std": 12.651914596557617,
+  "total_inference_time_in_s": "78.267",
+  "latency_ms_per_sample_mean": 43.07686996459961,
+  "latency_ms_per_sample_std": 5.334849834442139,
   "pruning_setup": {
     "decoder_pruning_ratio": 0.9,
     "convnext_3072_threshold": null,
@@ -22,12 +22,12 @@
     "calibration_shuffle": true
   },
   "evaluation_results": {
-    "cider_d": 0.4768808212901546,
-    "spice": 0.11323964139300985,
-    "spider": 0.2950602313415822,
-    "sbert_sim": 0.49552658238543723,
-    "fer": 0.05435897435897436,
-    "fense": 0.4695711626066134,
-    "meteor": 0.17809549692362506
+    "cider_d": 0.20206093114500506,
+    "spice": 0.05282282560199171,
+    "spider": 0.12744187837349838,
+    "sbert_sim": 0.31821844287312184,
+    "fer": 0.47897435897435897,
+    "fense": 0.22694390582188198,
+    "meteor": 0.10977074890083259
   }
 }
