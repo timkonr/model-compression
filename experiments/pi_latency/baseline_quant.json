@@ -1,0 +1,12 @@
+{
+  "model": "conette",
+  "compression_technique": "quantization",
+  "dataset": "clotho",
+  "seed": 42,
+  "device": "cpu",
+  "model_size_mb": 89.945193,
+  "unquantized_parameters": 49208923,
+  "latency_ms_per_sample_mean": 7978.80712890625,
+  "latency_ms_per_sample_std": 1434.9600830078125,
+  "n_measured": 30
+}
