@@ -81,6 +81,7 @@ def measure_latency(model, dataset, device, n_samples, n_warmup):
             elapsed = perf_counter() - start
             if i >= n_warmup:
                 times.append(elapsed)
+    times_ms = [t * 1000 for t in times]
     times = torch.tensor(times)
     return {
         "latency_ms_per_sample_mean": (times.mean() * 1000).item(),
@@ -88,6 +89,10 @@ def measure_latency(model, dataset, device, n_samples, n_warmup):
             (times.std(unbiased=False) * 1000).item() if len(times) > 1 else 0.0
         ),
         "n_measured": len(times),
+        # Per-sample times (same sample order/indices across configs, since the
+        # loader is unshuffled) -- kept so cross-config comparisons can use a
+        # paired test instead of only comparing the aggregate mean/std.
+        "latencies_ms": times_ms,
     }
 
 
