@@ -70,17 +70,21 @@ def measure_latency(model, dataset, device, n_samples, n_warmup):
     model.eval()
     is_cuda = device.startswith("cuda")
     times = []
+    filenames = []
+    output_lengths = []
     with torch.no_grad():
         for i, batch in enumerate(loader):
             if is_cuda:
                 torch.cuda.synchronize()
             start = perf_counter()
-            model(batch["audio"], batch["sr"], task=config.dataset)
+            outputs = model(batch["audio"], batch["sr"], task=config.dataset)
             if is_cuda:
                 torch.cuda.synchronize()
             elapsed = perf_counter() - start
             if i >= n_warmup:
                 times.append(elapsed)
+                filenames.append(batch["fname"][0])
+                output_lengths.append(len(outputs["cands"][0].split()))
     times_ms = [t * 1000 for t in times]
     times = torch.tensor(times)
     return {
@@ -89,10 +93,16 @@ def measure_latency(model, dataset, device, n_samples, n_warmup):
             (times.std(unbiased=False) * 1000).item() if len(times) > 1 else 0.0
         ),
         "n_measured": len(times),
-        # Per-sample times (same sample order/indices across configs, since the
-        # loader is unshuffled) -- kept so cross-config comparisons can use a
-        # paired test instead of only comparing the aggregate mean/std.
+        # Per-sample times, source filenames, and generated caption length (word
+        # count) -- same sample order/indices across configs since the loader is
+        # unshuffled. filenames lets a paired cross-config comparison actually
+        # verify the pairing instead of just assuming identical dataset order;
+        # output_lengths supports checking whether a latency difference is
+        # explained by longer/shorter generated sequences rather than the
+        # architecture itself (see test_pi_latency_significance.py).
         "latencies_ms": times_ms,
+        "filenames": filenames,
+        "output_lengths": output_lengths,
     }
 
 
