@@ -1,0 +1,35 @@
+# L2-Kontrolle zur Kalibrierungsquellen-Ablation (enc60_dec90, Test clotho, seed 42).
+# Zweck: sum_l2 ist datensatz-agnostisch (Scoring rein aus Gewichtsnormen, keine
+# Kalibrierungsdaten, kein Draw). Damit faellt die Domaenen-Abhaengigkeit weg, die
+# bei wanda ueber den Kalibrierungssatz reinkommt -- der Pruning-Schaden sollte
+# also auf Clotho und AudioCaps aehnlich ausfallen. Weicht der Cross-Domain-Abfall
+# hier deutlich weniger stark ab als bei wanda (Tabelle gen_calibration_source),
+# stuetzt das die Erklaerung, dass der Einbruch von der Kalibrierungsdomaene kommt
+# und nicht vom Pruning an sich.
+# Deterministisch (kein Kalibrierungs-Draw, keine RNG) => 1 Lauf, kein Seed-Sweep.
+# Das geprunte Modell ist identisch zum AudioCaps-Gegenstueck; nur Test-Split und
+# Task-Token unterscheiden sich.
+# Fuer enc_60 und dec_90 existieren die Clotho-Zellen bereits in
+# experiments/pruning/ablation/criterion/{enc_60,dec_90}_l2_seed_42; die Kombi
+# wurde dort nie getestet, daher hier neu.
+# Run: python src/run_all.py --config experiments/pruning/ablation/l2_cross_domain/enc60_dec90_clotho_seed_42/config.yaml
+
+model: conette
+dataset: clotho
+seed: 42
+
+technique: pruning
+
+pruning:
+  score_mode: sum_l2
+  global_pruning_ratio: 0.6
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
