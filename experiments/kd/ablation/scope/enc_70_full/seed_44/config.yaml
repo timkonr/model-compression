@@ -1,0 +1,42 @@
+# Scope-Ablation (Supervisor-Feedback): Full-Encoder-Training vs. surgical Recovery,
+# encoder-only @ 70 %, seed 44.
+# Kontrast-Arm zu experiments/kd/ablation/ratio/enc_70/seed_44 — ALLE Hyperparameter
+# identisch (pure_kd, LR 5e-4, 20 Epochen, eff. Batch 512, warmup 2, Val-FENSE-Selektion,
+# gleiches Wanda-Calibration-Sample pro Seed). Einzige Aenderung: train_scope.
+#   surgical (Ratio-Ablation): nur die vom Pruning tatsaechlich veraenderten
+#                              pwconv1/pwconv2-Paare sind trainierbar.
+#   full     (hier):           der gesamte Encoder ist trainierbar — inkl. dwconv,
+#                              LayerNorms, per-Block scale_layer, Stem und Final-Norm.
+#                              Dropout/DropPath im Encoder sind damit aktiv (train()),
+#                              bn0 bleibt wie gehabt in eval() (Micro-Batch 8 << 512).
+# Damit isoliert die Ablation genau eine Variable: den Recovery-Scope.
+# Run: mc-train-kd --config experiments/kd/ablation/scope/enc_70_full/seed_44/config.yaml
+
+model: conette
+dataset: clotho
+seed: 44
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  global_pruning_ratio: 0.7
+  decoder_pruning_ratio: null
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+kd:
+  mode: pure_kd
+  train_components: encoder
+  train_scope: full  # <- einzige Abweichung von ratio/enc_70/seed_44
+  alpha: 0.0
+  lr: 1.0e-4  # unused (decoder frozen)
+  lr_encoder: 5e-4  # Gewinner encoder_kd_lr-Sweep (getunt @60 %), unveraendert uebernommen
+  num_epochs: 20
+  batch_size: 8
+  grad_accum_steps: 64
+  patience: 999  # early stopping disabled for clean full-length runs
+  warmup_epochs: 2
+  save_dir: experiments/kd/ablation/scope/enc_70_full/seed_44
+
+data_folder: data/
+model_folder: model/
