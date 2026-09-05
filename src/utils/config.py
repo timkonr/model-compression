@@ -73,6 +73,9 @@ warmup_epochs = 1  # linear warmup before cosine decay; fixed across all configs
 kd_mode = "pure_kd"  # pure_kd (Minitron BP #5) | hybrid (Hinton: α·CE + (1-α)·KD) | encoder_ce (CE only)
 kd_alpha = 0.5  # hybrid only: weight on CE loss (0=pure KD, 1=pure CE)
 kd_train_components = "all"  # encoder | all (encoder + decoder + projection)
+kd_train_scope = "surgical"  # surgical: only the pwconv/linear pairs pruning actually
+# touched are trainable | full: every parameter of the selected component(s) is trainable
+# (ablation: does restricting recovery to the pruned layers help or hurt?)
 kd_save_dir = "checkpoints/kd"
 # weight_decay/betas/eps: adopted from CoNeTTE's original training config
 # (model/baseline/config.json) as the anchor, per Minitron's "use original HPs" guidance.
@@ -226,6 +229,7 @@ def load_from_yaml(path: str) -> None:
             "mode",
             "alpha",
             "train_components",
+            "train_scope",
             "weight_decay",
             "grad_clip_norm",
             "warmup_epochs",
@@ -238,6 +242,7 @@ def load_from_yaml(path: str) -> None:
                 "mode": "kd_mode",
                 "alpha": "kd_alpha",
                 "train_components": "kd_train_components",
+                "train_scope": "kd_train_scope",
             }.get(key, key)
             if key in kd_cfg:
                 val = kd_cfg[key]

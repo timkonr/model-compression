@@ -150,6 +150,33 @@ def _wd_groups(params, lr, weight_decay):
     return groups
 
 
+# ConvNeXt encoder submodules that must never be optimised, not even under
+# train_scope="full":
+#   spectrogram_extractor / logmel_extractor — the STFT basis and the mel filterbank.
+#     They are a fixed DSP front-end expressed as conv/linear buffers-as-parameters
+#     (requires_grad=False in the pretrained checkpoint). Pruning never touches them,
+#     and letting Adam move them would change the input representation itself while
+#     the teacher keeps the original one — a confound, not a recovery.
+#   head_audioset — the AudioSet classifier head. It is unused on the captioning path,
+#     so it receives no gradient anyway; excluding it keeps the reported trainable
+#     parameter count honest.
+_ENCODER_NON_TRAINABLE_PREFIXES = (
+    "spectrogram_extractor.",
+    "logmel_extractor.",
+    "head_audioset.",
+)
+
+
+def _full_encoder_params(student):
+    """Every learnable encoder parameter (dwconv, pwconv, LayerNorms, per-block scale,
+    stem, bn0 affine, final norm) minus the fixed front-end and the unused AudioSet head."""
+    return [
+        p
+        for name, p in student.preprocessor.encoder.named_parameters()
+        if not name.startswith(_ENCODER_NON_TRAINABLE_PREFIXES)
+    ]
+
+
 def _set_student_train_mode(
     student, train_components: str, encoder_surgical: bool, decoder_surgical: bool
 ) -> None:
@@ -175,8 +202,9 @@ def _set_student_train_mode(
     plain nn.Linear — train()/eval() makes no difference to them — so in that case the
     whole component is left in eval() rather than train()'d: no benefit, and it would
     needlessly wake up DropPath in the *other*, unpruned blocks of the same component.
-    train() is only needed when the whole component is being trained (the non-surgical
-    fallback), where real Dropout in it is providing actual regularisation.
+    train() is only needed when the whole component is being trained (train_scope="full",
+    or the fallback when pruning info is unavailable), where real Dropout/DropPath in it
+    is providing actual regularisation.
     """
     student.eval()
     if train_components in ("encoder", "all") and not encoder_surgical:
@@ -314,6 +342,7 @@ def train(
     save_dir,
     mode="pure_kd",
     train_components="all",
+    train_scope="surgical",
     student_hidden_dims=None,
     pruned_layer_names=None,
 ):
@@ -326,6 +355,11 @@ def train(
     if train_components not in valid_components:
         raise ValueError(
             f"Unknown train_components: {train_components}. Expected one of {sorted(valid_components)}"
+        )
+    valid_scopes = {"surgical", "full"}
+    if train_scope not in valid_scopes:
+        raise ValueError(
+            f"Unknown train_scope: {train_scope}. Expected one of {sorted(valid_scopes)}"
         )
 
     train_subset = "train" if dataset_name == "audiocaps" else "dev"
@@ -375,9 +409,9 @@ def train(
     for p in student.parameters():
         p.requires_grad_(False)
 
-    # Recover only the layers pruning actually touched (pwconv1/pwconv2 pairs for the
-    # encoder, linear1/linear2 pairs for the decoder), not every param in the whole
-    # component. student.preprocessor.encoder.parameters() also includes dwconv, LayerNorm,
+    # Default (train_scope="surgical"): recover only the layers pruning actually touched
+    # (pwconv1/pwconv2 pairs for the encoder, linear1/linear2 pairs for the decoder), not
+    # every param in the whole component. student.preprocessor.encoder.parameters() also includes dwconv, LayerNorm,
     # the per-block scale_layer, the downsample stem, the final norm, and the (captioning-
     # unused) head_audioset classifier — none of which pruning modified, so there is nothing
     # for them to "recover" from. Making them trainable only adds uncontrolled degrees of
@@ -390,7 +424,11 @@ def train(
         n for n in pruned_layer_names if n.startswith("model.decoder")
     )
 
-    encoder_surgical = bool(encoder_layer_names)
+    # train_scope="full" opts out of the surgical restriction entirely: every parameter
+    # of the selected component is trainable, including the layers pruning never touched
+    # (dwconv, LayerNorms, per-block scale, stem, final norm). This is the ablation arm
+    # that tests whether restricting recovery to the pruned layers actually helps.
+    encoder_surgical = bool(encoder_layer_names) and train_scope == "surgical"
     if encoder_surgical:
         encoder_params = [
             p
@@ -398,12 +436,12 @@ def train(
             for p in student.get_submodule(name).parameters()
         ]
     else:
-        # Fallback: pruning info unavailable, or train_components="all"/"decoder" requests
-        # a component that wasn't itself pruned (e.g. training the whole untouched decoder
-        # alongside a pruned encoder) — there is no "pruned subset" to restrict to.
-        encoder_params = list(student.preprocessor.encoder.parameters())
+        # train_scope="full", or: pruning info unavailable, or train_components="all"/
+        # "decoder" requests a component that wasn't itself pruned (e.g. training the whole
+        # untouched decoder alongside a pruned encoder) — no "pruned subset" to restrict to.
+        encoder_params = _full_encoder_params(student)
 
-    decoder_surgical = bool(decoder_layer_names)
+    decoder_surgical = bool(decoder_layer_names) and train_scope == "surgical"
     if decoder_surgical:
         decoder_params = [
             p
@@ -432,17 +470,25 @@ def train(
     total = sum(p.numel() for p in student.parameters())
     effective_batch = batch_size * grad_accum_steps
     print(
-        f"Fine-tuning | mode={mode} | train_components={train_components} | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size} (effective={effective_batch})"
+        f"Fine-tuning | mode={mode} | train_components={train_components} | train_scope={train_scope} | lr_decoder={lr} | lr_encoder={lr_encoder} | bs={batch_size} (effective={effective_batch})"
     )
     print(f"KD alpha (configured): {getattr(config, 'kd_alpha', None)}")
     print(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.1f}%)")
     if train_components in ("encoder", "all"):
-        scope = f"surgical, {len(encoder_layer_names)} pruned pwconv pairs" if encoder_surgical else "whole encoder (fallback)"
+        scope = (
+            f"surgical, {len(encoder_layer_names)} pruned pwconv pairs"
+            if encoder_surgical
+            else "whole encoder"
+        )
         print(
             f"  encoder params: {sum(p.numel() for p in encoder_params):,} @ lr={lr_encoder:.1e} [{scope}]"
         )
     if train_components in ("decoder", "all"):
-        scope = f"surgical, {len(decoder_layer_names)} pruned linear pairs + projection" if decoder_surgical else "whole decoder + projection (fallback)"
+        scope = (
+            f"surgical, {len(decoder_layer_names)} pruned linear pairs + projection"
+            if decoder_surgical
+            else "whole decoder + projection"
+        )
         print(
             f"  decoder+proj params: {sum(p.numel() for p in decoder_params):,} @ lr={lr:.1e} [{scope}]"
         )
@@ -481,6 +527,7 @@ def train(
     run_config = {
         "mode": mode,
         "train_components": train_components,
+        "train_scope": train_scope,
         "dataset": dataset_name,
         "num_epochs": num_epochs,
         "batch_size": batch_size,
@@ -826,6 +873,7 @@ def main():
         save_dir=save_dir,
         mode=config.kd_mode,
         train_components=getattr(config, "kd_train_components", "all"),
+        train_scope=getattr(config, "kd_train_scope", "surgical"),
         student_hidden_dims=student_hidden_dims,
         pruned_layer_names=pruned_layer_names,
     )
