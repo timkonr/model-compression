@@ -1,6 +1,7 @@
 {
   "mode": "pure_kd",
   "train_components": "encoder",
+  "train_scope": "full",
   "dataset": "clotho",
   "num_epochs": 20,
   "batch_size": 8,
