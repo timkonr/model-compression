@@ -261,8 +261,10 @@ def perform_inference(verbose):
     # operation count. FlopCounterMode does not register INT8 aten ops, so measuring a
     # quantized model yields a severe undercount. Model size is the relevant metric for
     # quantization; FLOPs are the relevant metric for pruning/KD.
-    print("measuring FLOPs...")
-    if config.quantization and not config.pruning:
+    if not getattr(config, "measure_flops", True):
+        print("[FLOPs] Skipped: measure_flops=False (not reported for this experiment).")
+        flops = None
+    elif config.quantization and not config.pruning:
         print(
             "[FLOPs] Skipped for quantization-only: FLOPs counting not working properly on quantized models. Consider unquantized model instead, as the number of operations does not change anyway."
         )
@@ -296,7 +298,9 @@ def perform_inference(verbose):
     predictions, references, inference_time = inference(model, data_loader=test_loader)
 
     latency_stats = {"latency_ms_per_sample_mean": None, "latency_ms_per_sample_std": None}
-    if config.baseline_model == "conette":
+    if config.baseline_model == "conette" and not getattr(config, "measure_latency", True):
+        print("[latency] Skipped: measure_latency=False (not reported for this experiment).")
+    elif config.baseline_model == "conette":
         print(
             f"measuring latency (bs=1, n={config.latency_n_samples}, "
             f"warmup={config.latency_n_warmup})..."
