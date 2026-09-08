@@ -1,0 +1,27 @@
+# L2-Kontrolle zur Kalibrierungsquellen-Ablation (enc70_dec90, Test audiocaps, seed 42).
+# Nachtrag analog zu den AudioCaps-kalibrierten enc70_dec90-Zellen: sum_l2 ist
+# datensatz-agnostisch (Scoring rein aus Gewichtsnormen, keine Kalibrierungsdaten,
+# kein Draw) und liefert damit die domaenenfreie Referenz fuer die Headline-Konfiguration.
+# Deterministisch => 1 Lauf, kein Seed-Sweep. Das geprunte Modell ist identisch zum
+# Gegenstueck des anderen Testsets; nur Test-Split und Task-Token unterscheiden sich.
+# Run: python src/run_all.py --config experiments/pruning/ablation/l2_cross_domain/enc70_dec90_audiocaps_seed_42/config.yaml
+
+model: conette
+dataset: audiocaps
+seed: 42
+
+technique: pruning
+
+pruning:
+  score_mode: sum_l2
+  global_pruning_ratio: 0.7
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/

@@ -1,0 +1,33 @@
+# Kalibrierungsquellen-Ablation (enc70_dec90, audiocaps-kalibriert, Test audiocaps, seed 44).
+# Nachtrag: enc70_dec90 war urspruenglich aus der Kalibrierungs-Ablation ausgeschlossen,
+# wird jetzt ergaenzt, weil es die Headline-Konfiguration ist und cross-domain den
+# staerksten Einbruch zeigt (-78.3 % pruned-only auf AudioCaps, s. gen_decomposition).
+# calibration_shuffle=true macht den 128er-Draw seed-abhaengig. Pruned-only, kein Training.
+# Kalibrierungspool: AudioCaps-val (~495 Clips, train nicht verfuegbar).
+# Der Clotho-kalibrierte Gegenpart kommt aus PRUNED_EVAL
+# (experiments/kd/ablation/cross_domain/eval_pruned/enc70_dec90_audiocaps_seed_44) und
+# wird bewusst NICHT hier dupliziert -- so bleiben Tabelle 12 und 13 numerisch konsistent.
+# Run: python src/run_all.py --config experiments/pruning/ablation/calibration/enc70_dec90_audiocapscalib_audiocaps_seed_44/config.yaml
+
+model: conette
+dataset: audiocaps
+seed: 44
+
+technique: pruning
+
+pruning:
+  score_mode: wanda
+  num_calibration_batches: 128
+  calibration_dataset: audiocaps
+  calibration_shuffle: true
+  global_pruning_ratio: 0.7
+  decoder_pruning_ratio: 0.9
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+save_inference_results: true
+data_folder: data/
+model_folder: model/
