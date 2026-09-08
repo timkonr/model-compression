@@ -9,6 +9,9 @@ browser_cookie_path = ""  # optional path to cookies. for more info see https://
 baseline = True  # Inference on baseline model
 baseline_model = "conette"  # clapcap | conette
 dataset = "clotho"  # clotho | audiocaps
+eval_subset = None  # evaluation split. None = reporting split (Clotho "eval",
+# AudioCaps "test"). Set to "val" for ablations whose outcome feeds a design
+# decision, so no choice is ever made on the reporting split.
 metrics = (
     "meteor",
     "spider",
@@ -22,6 +25,12 @@ data_folder = "data/"  # Path to data folder
 model_folder = "model/"  # Path to model folder
 aac_metrics_cache_path = None
 flops_n_samples = 10  # Number of samples to average over for FLOPs measurement
+measure_flops = True  # Set False for experiments that do not report FLOPs (e.g. the
+# criterion ablation, which compares caption quality at a fixed architecture). Both
+# efficiency probes then stay out of the run instead of producing numbers nobody reports.
+measure_latency = True  # Same, for the bs=1 latency benchmark. Also the correct
+# setting whenever the run scores a non-reporting split: a latency figure measured on
+# validation clips is not the figure the thesis reports and must not be confusable with it.
 eval_batch_size = 8  # Batch size for corpus-wide scoring inference (conette only)
 latency_n_samples = 30  # Fixed subset size for the dedicated bs=1 latency benchmark
 latency_n_warmup = 5  # Warm-up iterations discarded before timing the latency benchmark
@@ -132,7 +141,14 @@ def load_from_yaml(path: str) -> None:
         g["seed"] = cfg["seed"]
 
     # Pipeline control
-    for key in ("inference", "evaluation", "save_inference_results"):
+    for key in (
+        "inference",
+        "evaluation",
+        "save_inference_results",
+        "eval_subset",
+        "measure_flops",
+        "measure_latency",
+    ):
         if key in cfg:
             g[key] = cfg[key]
 

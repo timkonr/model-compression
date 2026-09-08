@@ -209,8 +209,12 @@ def measure_latency(model, dataset, device, n_samples, n_warmup):
 
 
 def perform_inference(verbose):
-    # test_ds: evaluation subset (Clotho="eval", AudioCaps="test") — used for inference
-    test_subset = "test" if config.dataset == "audiocaps" else "eval"
+    # test_ds: evaluation subset — used for inference. Defaults to the reporting
+    # split (Clotho="eval", AudioCaps="test"); config.eval_subset overrides it so an
+    # ablation that drives a design decision can be scored on the validation split.
+    test_subset = getattr(config, "eval_subset", None) or (
+        "test" if config.dataset == "audiocaps" else "eval"
+    )
     test_ds = load_dataset(verbose, subset=test_subset)
     test_loader = DataLoader(
         test_ds, batch_size=config.eval_batch_size, collate_fn=BasicCollate()
@@ -309,6 +313,7 @@ def perform_inference(verbose):
         "model": config.baseline_model,
         "compression_technique": technique,
         "dataset": config.dataset,
+        "eval_subset": test_subset,
         "seed": config.seed,
         "model_size_mb": model_size_mb,
         "unquantized_parameters": model_params,

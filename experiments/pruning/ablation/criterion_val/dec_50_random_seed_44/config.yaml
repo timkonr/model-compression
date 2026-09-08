@@ -1,0 +1,37 @@
+# Importance-criterion ablation (dec_50_random_seed_44) -- pruned-only, kein Training.
+# VALIDATION-Variante: identisch zu ../criterion/dec_50_random_seed_44, aber Evaluation auf dem
+# Clotho-VALIDATION-Split (eval_subset: val). Grund: diese Ablation entscheidet,
+# welches Importance-Kriterium in allen Folgeexperimenten verwendet wird. Eine
+# Auswahlentscheidung darf nicht auf dem Reporting-Split getroffen werden.
+# Kalibrierung (nur wanda): 128 Batches aus Clotho-dev (Trainingssplit), shuffled
+# => seed-abhaengiger Draw. Weder val noch eval fliessen in die Kalibrierung ein.
+# random: seed-abhaengig ueber globalen Torch-Seed. sum_l2: deterministisch (1 Lauf).
+# FLOPs- und Latenzmessung sind deaktiviert (siehe measure_flops/measure_latency unten).
+# Run: python src/run_all.py --config experiments/pruning/ablation/criterion_val/dec_50_random_seed_44/config.yaml
+
+model: conette
+dataset: clotho
+eval_subset: val
+seed: 44
+
+technique: pruning
+
+pruning:
+  score_mode: random
+  global_pruning_ratio: null
+  decoder_pruning_ratio: 0.5
+  convnext_3072_threshold: null
+  convnext_1536_threshold: null
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+# Diese Ablation vergleicht Caption-Qualitaet bei identischer Architektur --
+# FLOPs und Latenz sind ueber die drei Kriterien per Konstruktion gleich und
+# werden hier nicht berichtet. Ausserdem waere eine Latenzzahl auf val-Clips
+# nicht die in der Arbeit berichtete Groesse und damit verwechselbar.
+measure_flops: false
+measure_latency: false
+save_inference_results: true
+data_folder: data/
+model_folder: model/
