@@ -1,0 +1,17 @@
+# Evaluate baseline CoNeTTE on Clotho.
+
+model: conette
+dataset: clotho
+seed: 42
+eval_subset: val
+
+technique: none
+
+metrics: [spider, fense, meteor]
+inference: true
+evaluation: true
+measure_flops: false
+measure_latency: false
+save_inference_results: true
+data_folder: data/
+model_folder: model/
